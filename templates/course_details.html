@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+
+{% block title %}{{ course.name }} - Course Details{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h2><i class="fas fa-book"></i> {{ course.name }}</h2>
+                <p class="lead">Course Code: <strong>{{ course.code }}</strong></p>
+            </div>
+            <div>
+                <a href="{{ url_for('teacher_dashboard') }}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <i class="fas fa-users fa-3x mb-3"></i>
+                <h3>{{ students|length }}</h3>
+                <p>Registered Students</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <i class="fas fa-qrcode fa-3x mb-3"></i>
+                <h3>QR Registration</h3>
+                <p>Students can scan to join</p>
+                <div class="mb-2">
+                    <small class="d-block">Registration URL:</small>
+                    <small class="d-block text-break" style="font-size: 0.7em;">{{ external_url('student_registration', course_id=course.id) }}</small>
+                </div>
+                <a href="/static/qr_codes/{{ course.registration_qr_code }}" 
+                   class="btn btn-light btn-sm me-1" target="_blank">
+                    <i class="fas fa-eye"></i> View QR Code
+                </a>
+                <a href="{{ external_url('student_registration', course_id=course.id) }}" 
+                   class="btn btn-outline-light btn-sm" target="_blank">
+                    <i class="fas fa-external-link-alt"></i> Test Page
+                </a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <i class="fas fa-calendar-check fa-3x mb-3"></i>
+                <h3>{{ sessions|length }}</h3>
+                <p>Attendance Sessions</p>
+                <a href="{{ url_for('create_attendance_session', course_id=course.id) }}" 
+                   class="btn btn-light btn-sm">
+                    <i class="fas fa-plus"></i> New Session
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-users"></i> Registered Students</h5>
+                <div>
+                    <span class="badge bg-primary">{{ students|length }} Students</span>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if students %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Name</th>
+                                <th>Matricule</th>
+                                <th>Gender</th>
+                                <th>Registered At</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in students %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ student.name }}</td>
+                                <td><strong>{{ student.matricule }}</strong></td>
+                                <td>
+                                    {% if student.sex == 'Male' %}
+                                        <span class="badge bg-primary">{{ student.sex }}</span>
+                                    {% else %}
+                                        <span class="badge bg-pink">{{ student.sex }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ student.registered_at.strftime('%Y-%m-%d %H:%M') if student.registered_at else 'N/A' }}</td>
+                                <td>
+                                    <span class="badge bg-success">Registered</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Students Registered Yet</h5>
+                    <p class="text-muted">Share the registration QR code with students to get them registered for this course.</p>
+                    
+                    <div class="mt-4">
+                        <div class="card d-inline-block">
+                            <div class="card-body text-center">
+                                <h6>Registration QR Code</h6>
+                                {% if course.registration_qr_code %}
+                                <img src="/static/qr_codes/{{ course.registration_qr_code }}" 
+                                     alt="Registration QR Code" class="qr-code">
+                                <p class="small text-muted mt-2">Students scan this to register</p>
+                                <div class="mt-3">
+                                    <strong>Registration URL:</strong><br>
+                                    <small class="text-primary">{{ external_url('student_registration', course_id=course.id) }}</small>
+                                </div>
+                                <div class="mt-2">
+                                    <a href="{{ external_url('student_registration', course_id=course.id) }}" 
+                                       class="btn btn-sm btn-outline-primary" target="_blank">
+                                        <i class="fas fa-external-link-alt"></i> Test Registration Page
+                                    </a>
+                                </div>
+                                {% else %}
+                                <p class="text-muted">QR Code not generated yet</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Attendance Sessions -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-calendar-check"></i> Attendance Sessions</h5>
+                <a href="{{ url_for('create_attendance_session', course_id=course.id) }}" 
+                   class="btn btn-success btn-sm">
+                    <i class="fas fa-plus"></i> Create New Session
+                </a>
+            </div>
+            <div class="card-body">
+                {% if sessions %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Session Name</th>
+                                <th>Date</th>
+                                <th>Status</th>
+                                <th>Time Remaining</th>
+                                <th>Attendance Count</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for session in sessions %}
+                            <tr>
+                                <td><strong>{{ session.session_name }}</strong></td>
+                                <td>{{ session.created_at.strftime('%Y-%m-%d') if session.created_at else 'N/A' }}</td>
+                                <td>
+                                    {% if session.is_expired() %}
+                                        <span class="badge bg-danger">Expired</span>
+                                    {% elif session.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if session.is_expired() %}
+                                        <span class="text-danger">Expired</span>
+                                    {% elif session.is_active %}
+                                        <span class="text-success">{{ session.minutes_remaining() }} min</span>
+                                    {% else %}
+                                        <span class="text-muted">Ended</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-info">{{ session.attendance_records|length }} present</span>
+                                </td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        {% if session.is_active and not session.is_expired() %}
+                                        <a href="/static/qr_codes/{{ session.qr_code_path }}" 
+                                           class="btn btn-sm btn-outline-primary" target="_blank">
+                                            <i class="fas fa-qrcode"></i> View QR
+                                        </a>
+                                        <a href="{{ url_for('end_attendance_session', session_id=session.id) }}" 
+                                           class="btn btn-sm btn-outline-warning"
+                                           onclick="return confirm('End this session?')">
+                                            <i class="fas fa-stop"></i> End
+                                        </a>
+                                        {% endif %}
+                                        
+                                        {% if session.attendance_records|length > 0 %}
+                                        <div class="btn-group" role="group">
+                                            <button type="button" class="btn btn-sm btn-outline-success dropdown-toggle" 
+                                                    data-bs-toggle="dropdown">
+                                                <i class="fas fa-download"></i> Export
+                                            </button>
+                                            <ul class="dropdown-menu">
+                                                <li>
+                                                    <a class="dropdown-item" 
+                                                       href="{{ url_for('export_attendance', session_id=session.id, format='excel') }}">
+                                                        <i class="fas fa-file-excel text-success"></i> Excel (.xlsx)
+                                                    </a>
+                                                </li>
+                                                <li>
+                                                    <a class="dropdown-item" 
+                                                       href="{{ url_for('export_attendance', session_id=session.id, format='pdf') }}">
+                                                        <i class="fas fa-file-pdf text-danger"></i> PDF Report
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No Attendance Sessions Yet</h5>
+                    <p class="text-muted">Create your first attendance session to start tracking student attendance.</p>
+                    <a href="{{ url_for('create_attendance_session', course_id=course.id) }}" 
+                       class="btn btn-success">
+                        <i class="fas fa-plus"></i> Create Your First Session
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Course Actions -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-tools"></i> Course Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4 text-center">
+                        <div class="mb-3">
+                            <i class="fas fa-qrcode fa-2x text-success"></i>
+                        </div>
+                        <h6>Create Attendance Session</h6>
+                        <p class="small text-muted">Generate QR codes for taking attendance (15min validity)</p>
+                        <a href="{{ url_for('create_attendance_session', course_id=course.id) }}" 
+                           class="btn btn-success btn-sm">
+                            <i class="fas fa-plus"></i> New Session
+                        </a>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="mb-3">
+                            <i class="fas fa-chart-bar fa-2x text-info"></i>
+                        </div>
+                        <h6>View Analytics</h6>
+                        <p class="small text-muted">See attendance patterns and statistics</p>
+                        <a href="{{ url_for('course_analytics', course_id=course.id) }}" 
+                           class="btn btn-info btn-sm">
+                            <i class="fas fa-chart-line"></i> Analytics
+                        </a>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="mb-3">
+                            <i class="fas fa-shield-alt fa-2x text-warning"></i>
+                        </div>
+                        <h6>Security Features</h6>
+                        <p class="small text-muted">Biometric verification & location checking</p>
+                        <span class="badge bg-success">
+                            <i class="fas fa-check"></i> Active
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Home - QR Attendance System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <div class="jumbotron bg-primary text-white p-5 rounded">
+            <h1 class="display-4">
+                <i class="fas fa-qrcode"></i> QR Code Student Attendance Management System
+            </h1>
+            <p class="lead">
+                A modern, efficient way to manage student attendance using QR codes and face recognition technology.
+            </p>
+            <hr class="my-4">
+            <p>
+                Secure, accurate, and location-based attendance tracking for educational institutions.
+            </p>
+            {% if not current_user.is_authenticated %}
+            <a class="btn btn-light btn-lg" href="{{ url_for('login') }}" role="button">
+                <i class="fas fa-sign-in-alt"></i> Login to System
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-user-shield fa-3x text-primary mb-3"></i>
+                <h5 class="card-title">Admin Panel</h5>
+                <p class="card-text">
+                    Centralized administration system where admins create and manage teacher accounts.
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-chalkboard-teacher fa-3x text-success mb-3"></i>
+                <h5 class="card-title">Teacher Dashboard</h5>
+                <p class="card-text">
+                    Teachers can create courses, generate QR codes, and manage attendance sessions.
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-users fa-3x text-info mb-3"></i>
+                <h5 class="card-title">Student Registration</h5>
+                <p class="card-text">
+                    Students register for courses by scanning QR codes and providing their information.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-map-marker-alt fa-3x text-warning mb-3"></i>
+                <h5 class="card-title">Geolocation Verification</h5>
+                <p class="card-text">
+                    Attendance is verified using geolocation to ensure students are physically present on campus.
+                </p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body text-center">
+                <i class="fas fa-chart-bar fa-3x text-danger mb-3"></i>
+                <h5 class="card-title">Analytics & Reports</h5>
+                <p class="card-text">
+                    Comprehensive analytics including attendance percentages, gender statistics, and trend analysis.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fas fa-info-circle"></i> How It Works</h5>
+                <div class="row">
+                    <div class="col-md-3 text-center">
+                        <div class="step-number bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">1</div>
+                        <h6 class="mt-2">Admin Creates Teacher Account</h6>
+                        <p class="small">Administrator creates teacher accounts and sends credentials via email.</p>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="step-number bg-success text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">2</div>
+                        <h6 class="mt-2">Teacher Creates Course</h6>
+                        <p class="small">Teacher logs in and creates courses with unique QR codes for registration.</p>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="step-number bg-info text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">3</div>
+                        <h6 class="mt-2">Students Register</h6>
+                        <p class="small">Students scan registration QR code and provide their details with photo.</p>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <div class="step-number bg-warning text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 50px; height: 50px;">4</div>
+                        <h6 class="mt-2">Attendance Tracking</h6>
+                        <p class="small">Teacher generates attendance QR codes with location and time restrictions.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

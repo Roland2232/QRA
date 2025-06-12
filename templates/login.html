@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+
+{% block title %}Login - QR Attendance System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-6 col-lg-5">
+        <!-- Welcome Header -->
+        <div class="text-center mb-4">
+            <div class="mb-3">
+                <i class="fas fa-qrcode fa-4x text-primary"></i>
+            </div>
+            <h2 class="fw-bold text-primary">Welcome to QR Attendance</h2>
+            <p class="text-muted">📱 Mobile-Optimized Attendance System</p>
+        </div>
+
+        <!-- Admin Code Login Card -->
+        <div class="card mb-4 shadow-sm">
+            <div class="card-header bg-gradient text-white text-center" style="background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);">
+                <h4 class="mb-0"><i class="fas fa-shield-alt"></i> Admin Access</h4>
+                <small class="text-light">System Administrator</small>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" action="{{ url_for('login') }}" id="adminForm">
+                    <div class="mb-4">
+                        <label for="admin_code" class="form-label fw-bold">
+                            <i class="fas fa-key text-danger"></i> Admin Access Code
+                        </label>
+                        <input type="password" 
+                               class="form-control form-control-lg" 
+                               id="admin_code" 
+                               name="admin_code" 
+                               placeholder="Enter admin code" 
+                               required
+                               autocomplete="current-password"
+                               style="font-size: 16px;">
+                        <div class="form-text">
+                            <small><i class="fas fa-info-circle"></i> Enter the system admin code to access admin panel</small>
+                        </div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-danger btn-lg py-3" id="adminBtn" style="border-radius: 12px;">
+                            <i class="fas fa-shield-alt"></i> Login as Admin
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Teacher Login Card -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-gradient text-white text-center" style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);">
+                <h4 class="mb-0"><i class="fas fa-chalkboard-teacher"></i> Teacher Login</h4>
+                <small class="text-light">Use your email credentials</small>
+            </div>
+            <div class="card-body p-4">
+                <form method="POST" action="{{ url_for('login') }}" id="teacherForm">
+                    <div class="mb-4">
+                        <label for="username" class="form-label fw-bold">
+                            <i class="fas fa-user text-primary"></i> Username
+                        </label>
+                        <input type="text" 
+                               class="form-control form-control-lg" 
+                               id="username" 
+                               name="username" 
+                               placeholder="Enter your username"
+                               required
+                               autocomplete="username"
+                               style="font-size: 16px;">
+                    </div>
+                    <div class="mb-4">
+                        <label for="password" class="form-label fw-bold">
+                            <i class="fas fa-lock text-primary"></i> Password
+                        </label>
+                        <input type="password" 
+                               class="form-control form-control-lg" 
+                               id="password" 
+                               name="password" 
+                               placeholder="Enter your password"
+                               required
+                               autocomplete="current-password"
+                               style="font-size: 16px;">
+                        <div class="form-text">
+                            <small><i class="fas fa-envelope"></i> Check your email for login credentials</small>
+                        </div>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg py-3" id="teacherBtn" style="border-radius: 12px;">
+                            <i class="fas fa-sign-in-alt"></i> Login as Teacher
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Mobile Instructions -->
+        <div class="alert alert-light border mt-4 d-block d-md-none">
+            <h6><i class="fas fa-mobile-alt"></i> Mobile Access Tips:</h6>
+            <ul class="mb-0 small">
+                <li><strong>Students:</strong> Use QR codes to register and mark attendance</li>
+                <li><strong>Teachers:</strong> Login to create courses and manage attendance</li>
+                <li><strong>Admins:</strong> Use admin code to manage the system</li>
+            </ul>
+        </div>
+        
+        <!-- System Info -->
+        <div class="text-center mt-4">
+            <div class="row text-center">
+                <div class="col-4">
+                    <i class="fas fa-qrcode fa-2x text-info mb-2"></i>
+                    <br><small class="text-muted">QR Codes</small>
+                </div>
+                <div class="col-4">
+                    <i class="fas fa-map-marker-alt fa-2x text-success mb-2"></i>
+                    <br><small class="text-muted">Location</small>
+                </div>
+                <div class="col-4">
+                    <i class="fas fa-mobile-alt fa-2x text-primary mb-2"></i>
+                    <br><small class="text-muted">Mobile Ready</small>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer Info -->
+        <div class="text-center mt-4">
+            <small class="text-muted">
+                <i class="fas fa-info-circle"></i> 
+                Need help? Teachers receive login credentials via email.
+            </small>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Form submission enhancements
+    const adminForm = document.getElementById('adminForm');
+    const teacherForm = document.getElementById('teacherForm');
+    const adminBtn = document.getElementById('adminBtn');
+    const teacherBtn = document.getElementById('teacherBtn');
+    
+    // Admin form submission
+    adminForm.addEventListener('submit', function(e) {
+        adminBtn.disabled = true;
+        adminBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+        
+        // Add slight delay to show loading state
+        setTimeout(() => {
+            // Form will submit normally
+        }, 100);
+    });
+    
+    // Teacher form submission
+    teacherForm.addEventListener('submit', function(e) {
+        teacherBtn.disabled = true;
+        teacherBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
+        
+        // Add slight delay to show loading state
+        setTimeout(() => {
+            // Form will submit normally
+        }, 100);
+    });
+    
+    // Auto-focus on first empty field
+    const adminCodeInput = document.getElementById('admin_code');
+    const usernameInput = document.getElementById('username');
+    
+    // Focus on admin code if it's empty, otherwise focus on username
+    if (adminCodeInput.value.trim() === '') {
+        adminCodeInput.focus();
+    } else if (usernameInput.value.trim() === '') {
+        usernameInput.focus();
+    }
+    
+    // Input validation feedback
+    const inputs = document.querySelectorAll('input[required]');
+    inputs.forEach(input => {
+        input.addEventListener('blur', function() {
+            if (this.value.trim() === '') {
+                this.classList.add('is-invalid');
+            } else {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            }
+        });
+        
+        input.addEventListener('input', function() {
+            if (this.value.trim() !== '') {
+                this.classList.remove('is-invalid');
+                this.classList.add('is-valid');
+            }
+        });
+    });
+    
+    // Prevent zoom on iOS when focusing on input fields
+    if (window.innerWidth < 768) {
+        inputs.forEach(input => {
+            input.addEventListener('focus', function() {
+                this.style.fontSize = '16px';
+            });
+        });
+    }
+    
+    // Auto-uppercase admin code
+    adminCodeInput.addEventListener('input', function() {
+        this.value = this.value.toUpperCase();
+    });
+    
+    // Show/hide password functionality
+    const passwordInput = document.getElementById('password');
+    const adminCodeInputField = document.getElementById('admin_code');
+    
+    // Add show/hide password toggle for mobile
+    if (window.innerWidth < 768) {
+        [passwordInput, adminCodeInputField].forEach(input => {
+            if (input) {
+                const wrapper = input.parentElement;
+                const toggleBtn = document.createElement('button');
+                toggleBtn.type = 'button';
+                toggleBtn.className = 'btn btn-outline-secondary btn-sm position-absolute top-50 end-0 translate-middle-y me-2';
+                toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
+                toggleBtn.style.zIndex = '10';
+                
+                wrapper.style.position = 'relative';
+                wrapper.appendChild(toggleBtn);
+                
+                toggleBtn.addEventListener('click', function() {
+                    if (input.type === 'password') {
+                        input.type = 'text';
+                        this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                    } else {
+                        input.type = 'password';
+                        this.innerHTML = '<i class="fas fa-eye"></i>';
+                    }
+                });
+            }
+        });
+    }
+});
+</script>
+
+<style>
+/* Login page specific styles */
+.card {
+    border-radius: 15px;
+    overflow: hidden;
+}
+
+.card-header {
+    padding: 1.5rem;
+}
+
+.bg-gradient {
+    background-size: 200% 200%;
+    animation: gradientShift 3s ease infinite;
+}
+
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+.form-control:focus {
+    box-shadow: 0 0 0 0.25rem rgba(0, 123, 255, 0.15);
+    border-color: #007bff;
+}
+
+.btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+/* Mobile specific login styles */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 2rem 1.5rem;
+    }
+    
+    .form-control-lg {
+        font-size: 16px !important;
+        padding: 18px 16px;
+    }
+    
+    .btn-lg {
+        font-size: 18px;
+        padding: 16px 20px;
+    }
+    
+    h2 {
+        font-size: 24px;
+    }
+    
+    h4 {
+        font-size: 18px;
+    }
+    
+    .fa-4x {
+        font-size: 3rem !important;
+    }
+}
+
+@media (max-width: 576px) {
+    .card-body {
+        padding: 1.5rem 1rem;
+    }
+    
+    .fa-4x {
+        font-size: 2.5rem !important;
+    }
+    
+    h2 {
+        font-size: 20px;
+    }
+}
+
+/* Loading animation */
+.btn:disabled {
+    opacity: 0.8;
+    transform: none;
+}
+
+.btn-loading {
+    pointer-events: none;
+}
+
+/* Enhanced focus states for accessibility */
+.form-control:focus,
+.btn:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+}
+</style>
+{% endblock %} 

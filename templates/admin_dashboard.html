@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - QR Attendance System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2><i class="fas fa-user-shield"></i> Admin Dashboard</h2>
+        <p class="lead">Welcome, {{ current_user.username }}! Manage your QR Attendance System.</p>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card stats-card">
+            <div class="card-body text-center">
+                <i class="fas fa-users fa-3x mb-3"></i>
+                <h3>{{ teachers|length }}</h3>
+                <p>Total Teachers</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5><i class="fas fa-chalkboard-teacher"></i> Teachers Management</h5>
+                <a href="{{ url_for('create_teacher') }}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Create New Teacher
+                </a>
+            </div>
+            <div class="card-body">
+                {% if teachers %}
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Full Name</th>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Created At</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for teacher in teachers %}
+                            <tr>
+                                <td>{{ teacher.full_name }}</td>
+                                <td>{{ teacher.username }}</td>
+                                <td>{{ teacher.email }}</td>
+                                <td>{{ teacher.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    {% if teacher.must_change_password %}
+                                        <span class="badge bg-warning">Pending Password Change</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button type="button" 
+                                            class="btn btn-danger btn-sm" 
+                                            onclick="confirmDelete('{{ teacher.id }}', '{{ teacher.full_name }}', '{{ teacher.username }}')"
+                                            title="Delete Teacher">
+                                        <i class="fas fa-trash"></i> Delete
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center">
+                    <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                    <p class="text-muted">No teachers created yet.</p>
+                    <a href="{{ url_for('create_teacher') }}" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Create First Teacher
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteTeacherModal" tabindex="-1" aria-labelledby="deleteTeacherModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="deleteTeacherModalLabel">
+                    <i class="fas fa-exclamation-triangle"></i> Confirm Teacher Deletion
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-warning"></i>
+                    <strong>Warning!</strong> This action cannot be undone.
+                </div>
+                <p>Are you sure you want to delete the following teacher?</p>
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6 class="card-title mb-1" id="teacherName"></h6>
+                        <p class="card-text text-muted mb-0">
+                            <small>Username: <span id="teacherUsername"></span></small>
+                        </p>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <p class="text-danger mb-0">
+                        <small><i class="fas fa-info-circle"></i> 
+                        <strong>This will also delete:</strong> All courses created by this teacher, all students registered in those courses, and all attendance records.</small>
+                    </p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <form id="deleteTeacherForm" method="POST" style="display: inline;">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Yes, Delete Teacher
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function confirmDelete(teacherId, teacherName, teacherUsername) {
+    // Set the teacher information in the modal
+    document.getElementById('teacherName').textContent = teacherName;
+    document.getElementById('teacherUsername').textContent = teacherUsername;
+    
+    // Set the form action to the delete URL
+    document.getElementById('deleteTeacherForm').action = `/admin/delete_teacher/${teacherId}`;
+    
+    // Show the modal
+    const modal = new bootstrap.Modal(document.getElementById('deleteTeacherModal'));
+    modal.show();
+}
+
+// Add confirmation to prevent accidental clicks
+document.addEventListener('DOMContentLoaded', function() {
+    const deleteButtons = document.querySelectorAll('button[onclick^="confirmDelete"]');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            // The onclick handler will show the modal
+            // This is just for additional safety
+            e.preventDefault();
+        });
+    });
+    
+    // Add loading state to delete form
+    const deleteForm = document.getElementById('deleteTeacherForm');
+    if (deleteForm) {
+        deleteForm.addEventListener('submit', function() {
+            const submitBtn = this.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
+        });
+    }
+});
+</script>
+{% endblock %} 

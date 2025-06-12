@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Student Registration - {{ course.name }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-8">
+        <div class="card">
+            <div class="card-header bg-info text-white text-center">
+                <h4><i class="fas fa-user-plus"></i> Register for Course</h4>
+                <h5>{{ course.name }} ({{ course.code }})</h5>
+                <p class="mb-0 mt-2"><small>📱 Mobile-Friendly Registration</small></p>
+            </div>
+            <div class="card-body p-4">
+                <!-- Course Information -->
+                <div class="alert alert-primary text-center mb-4">
+                    <i class="fas fa-book"></i>
+                    <strong>Course:</strong> {{ course.name }}<br>
+                    <strong>Code:</strong> {{ course.code }}<br>
+                    <strong>Teacher:</strong> {{ course.teacher.name }}
+                </div>
+
+                <form id="registrationForm">
+                    <div class="row">
+                        <div class="col-12 col-md-6">
+                            <div class="mb-4">
+                                <label for="name" class="form-label fw-bold">
+                                    <i class="fas fa-user text-info"></i> Full Name *
+                                </label>
+                                <input type="text" 
+                                       class="form-control form-control-lg" 
+                                       id="name" 
+                                       name="name" 
+                                       required 
+                                       placeholder="Enter your full name"
+                                       autocomplete="name"
+                                       style="font-size: 16px;">
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="mb-4">
+                                <label for="matricule" class="form-label fw-bold">
+                                    <i class="fas fa-id-card text-info"></i> Matricule *
+                                </label>
+                                <input type="text" 
+                                       class="form-control form-control-lg" 
+                                       id="matricule" 
+                                       name="matricule" 
+                                       required
+                                       placeholder="Enter your matricule number"
+                                       autocomplete="off"
+                                       style="font-size: 16px;">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="sex" class="form-label fw-bold">
+                            <i class="fas fa-venus-mars text-info"></i> Gender *
+                        </label>
+                        <select class="form-control form-control-lg form-select" 
+                                id="sex" 
+                                name="sex" 
+                                required
+                                style="font-size: 16px;">
+                            <option value="">Select Gender</option>
+                            <option value="Male">👨 Male</option>
+                            <option value="Female">👩 Female</option>
+                        </select>
+                    </div>
+                    
+                    <div class="alert alert-info d-flex align-items-center mb-4">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <div>
+                            <strong>Note:</strong> Face recognition features will be added later. 
+                            For now, you can register with basic information.
+                        </div>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" 
+                                class="btn btn-info btn-lg py-3" 
+                                id="submitBtn"
+                                style="font-size: 18px; border-radius: 12px;">
+                            <i class="fas fa-user-plus"></i> Register for Course
+                        </button>
+                    </div>
+                </form>
+                
+                <div id="message" class="mt-4"></div>
+                
+                <!-- Mobile-specific instructions -->
+                <div class="alert alert-light border mt-4 d-block d-md-none">
+                    <h6><i class="fas fa-mobile-alt"></i> Mobile Tips:</h6>
+                    <ul class="mb-0 small">
+                        <li>Make sure you have a stable internet connection</li>
+                        <li>Fill all required fields before submitting</li>
+                        <li>Your registration will be confirmed instantly</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Prevent zoom on iOS when focusing on input fields
+document.addEventListener('DOMContentLoaded', function() {
+    const inputs = document.querySelectorAll('input, select');
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            if (window.innerWidth < 768) {
+                input.style.fontSize = '16px';
+            }
+        });
+    });
+});
+
+document.getElementById('registrationForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const messageDiv = document.getElementById('message');
+    const submitBtn = document.getElementById('submitBtn');
+    
+    // Show loading state
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registering...';
+    
+    // Clear previous messages
+    messageDiv.innerHTML = '';
+    
+    fetch('{{ external_url("student_registration", course_id=course.id) }}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            messageDiv.innerHTML = `
+                <div class="alert alert-success text-center">
+                    <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                    <h5 class="mb-2">🎉 Registration Successful!</h5>
+                    <p class="mb-2">${data.success}</p>
+                    <hr>
+                    <p class="mb-0"><strong>What's next?</strong><br>
+                    Wait for your teacher to create attendance sessions, 
+                    then scan the attendance QR code to mark your presence!</p>
+                </div>`;
+            this.reset();
+            
+            // Success vibration (if supported)
+            if (navigator.vibrate) {
+                navigator.vibrate([100, 50, 100]);
+            }
+        } else {
+            messageDiv.innerHTML = `
+                <div class="alert alert-danger text-center">
+                    <i class="fas fa-exclamation-circle fa-2x text-danger mb-2"></i>
+                    <h6 class="mb-2">Registration Failed</h6>
+                    <p class="mb-0">${data.error}</p>
+                </div>`;
+            
+            // Error vibration (if supported)
+            if (navigator.vibrate) {
+                navigator.vibrate([200]);
+            }
+        }
+        
+        // Scroll to message
+        messageDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        messageDiv.innerHTML = `
+            <div class="alert alert-danger text-center">
+                <i class="fas fa-wifi fa-2x text-danger mb-2"></i>
+                <h6 class="mb-2">Connection Error</h6>
+                <p class="mb-0">Please check your internet connection and try again.</p>
+            </div>`;
+        
+        messageDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    })
+    .finally(() => {
+        // Reset button state
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-user-plus"></i> Register for Course';
+    });
+});
+
+// Auto-format matricule input
+document.getElementById('matricule').addEventListener('input', function(e) {
+    // Remove any non-alphanumeric characters and convert to uppercase
+    this.value = this.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+});
+
+// Form validation feedback
+const requiredInputs = document.querySelectorAll('input[required], select[required]');
+requiredInputs.forEach(input => {
+    input.addEventListener('blur', function() {
+        if (this.value.trim() === '') {
+            this.classList.add('is-invalid');
+        } else {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+        }
+    });
+    
+    input.addEventListener('input', function() {
+        if (this.value.trim() !== '') {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+        }
+    });
+});
+</script>
+
+<style>
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1.5rem !important;
+    }
+    
+    .form-control-lg {
+        font-size: 16px !important; /* Prevents zoom on iOS */
+        padding: 15px !important;
+        border-radius: 8px !important;
+    }
+    
+    .btn-lg {
+        padding: 15px 20px !important;
+        font-size: 18px !important;
+    }
+    
+    .alert {
+        font-size: 14px;
+    }
+    
+    h4 {
+        font-size: 1.4rem;
+    }
+    
+    h5 {
+        font-size: 1.2rem;
+    }
+}
+
+/* Touch-friendly enhancements */
+.form-control:focus {
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    border-color: #86b7fe;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+/* Loading animation */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.btn:disabled {
+    animation: pulse 1.5s infinite;
+}
+</style>
+{% endblock %} 
