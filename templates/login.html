@@ -22,6 +22,7 @@
             </div>
             <div class="card-body p-4">
                 <form method="POST" action="{{ url_for('login') }}" id="adminForm">
+                    <input type="hidden" name="login_type" value="admin">
                     <div class="mb-4">
                         <label for="admin_code" class="form-label fw-bold">
                             <i class="fas fa-key text-danger"></i> Admin Access Code
@@ -29,7 +30,7 @@
                         <input type="password" 
                                class="form-control form-control-lg" 
                                id="admin_code" 
-                               name="admin_code" 
+                               name="secret_code" 
                                placeholder="Enter admin code" 
                                required
                                autocomplete="current-password"
@@ -55,6 +56,7 @@
             </div>
             <div class="card-body p-4">
                 <form method="POST" action="{{ url_for('login') }}" id="teacherForm">
+                    <input type="hidden" name="login_type" value="teacher">
                     <div class="mb-4">
                         <label for="username" class="form-label fw-bold">
                             <i class="fas fa-user text-primary"></i> Username
