@@ -103,26 +103,23 @@ def validate_render_env():
 def test_database_connection():
     """Test PostgreSQL database connection"""
     try:
-        import psycopg2
+        import psycopg
         from urllib.parse import urlparse
         
         config = RenderConfig()
         url = urlparse(config.DATABASE_URL)
         
-        conn = psycopg2.connect(
+        with psycopg.connect(
             host=url.hostname,
             port=url.port,
             user=url.username,
             password=url.password,
-            database=url.path[1:],  # Remove leading slash
+            dbname=url.path[1:],  # Remove leading slash
             sslmode='require'
-        )
-        
-        cursor = conn.cursor()
-        cursor.execute('SELECT version();')
-        version = cursor.fetchone()
-        cursor.close()
-        conn.close()
+        ) as conn:
+            with conn.cursor() as cursor:
+                cursor.execute('SELECT version();')
+                version = cursor.fetchone()
         
         print(f"✅ PostgreSQL connection successful: {version[0]}")
         return True
