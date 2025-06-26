@@ -26,13 +26,17 @@ from functools import wraps
 def get_network_ip():
     """Get the actual network IP address that mobile devices can connect to"""
     try:
-        # Try to get IP from ipconfig output
+        
+        if os.environ.get('FLASK_ENV') == 'development':
+            return 'localhost'
+            
+        
         result = subprocess.run(['ipconfig'], capture_output=True, text=True, shell=True)
         lines = result.stdout.split('\n')
         
         for i, line in enumerate(lines):
             if 'Wireless LAN adapter Wi-Fi:' in line or 'Wi-Fi:' in line:
-                # Look for IPv4 address in the next few lines
+                
                 for j in range(i, min(i + 10, len(lines))):
                     if 'IPv4 Address' in lines[j] and ':' in lines[j]:
                         ip = lines[j].split(':')[1].strip()
@@ -47,7 +51,7 @@ def get_network_ip():
         return local_ip
     except Exception as e:
         print(f"Error getting network IP: {e}")
-        return '192.168.1.100'  # Default fallback
+        return 'localhost'  # Default to localhost if all else fails
 
 # Get the actual network IP automatically
 NETWORK_IP = get_network_ip()
@@ -550,8 +554,7 @@ def student_registration(course_id):
             name=name,
             matricule=matricule,
             sex=sex,
-            course_id=course_id,
-            face_encoding=None  # Will be added later with face recognition
+            course_id=course_id
         )
         
         try:
@@ -618,16 +621,16 @@ with app.app_context():
 @login_required
 @teacher_password_required
 def create_attendance_session(course_id):
-    if not isinstance(current_user, Teacher):
-        flash('Access denied')
-        return redirect(url_for('index'))
-    
-    course = Course.query.filter_by(id=course_id, teacher_id=current_user.id).first_or_404()
+    course = Course.query.get_or_404(course_id)
     
     if request.method == 'POST':
         session_name = request.form['session_name']
-        latitude = float(request.form['latitude'])
-        longitude = float(request.form['longitude'])
+        latitude = request.form.get('latitude')
+        longitude = request.form.get('longitude')
+        
+        if not latitude or not longitude:
+            flash('Please capture your location before creating the session', 'error')
+            return redirect(url_for('create_attendance_session', course_id=course_id))
         
         # Create attendance session with 15-minute expiry
         expires_at = datetime.utcnow() + timedelta(minutes=15)
@@ -635,11 +638,11 @@ def create_attendance_session(course_id):
         attendance_session = AttendanceSession(
             session_name=session_name,
             course_id=course_id,
+            is_active=True,
+            expires_at=expires_at,
             latitude=latitude,
             longitude=longitude,
-            radius_meters=300,  # 300 meters as requested
-            is_active=True,
-            expires_at=expires_at
+            radius_meters=300  # 300 meters radius
         )
         
         db.session.add(attendance_session)
@@ -676,13 +679,6 @@ def take_attendance(session_id):
     
     if request.method == 'POST':
         selected_matricule = request.form['selected_matricule']
-        student_latitude = float(request.form['latitude'])
-        student_longitude = float(request.form['longitude'])
-        biometric_verified = request.form.get('biometric_verified') == 'true'
-        
-        # Verify biometric authentication was completed
-        if not biometric_verified:
-            return jsonify({'error': 'Biometric verification required'}), 400
         
         # Find student by matricule in this course
         student = Student.query.filter_by(matricule=selected_matricule, course_id=course.id).first()
@@ -698,20 +694,29 @@ def take_attendance(session_id):
         if existing_attendance:
             return jsonify({'error': 'Attendance already marked for this session'}), 400
         
-        # Verify location (within 300m radius)
-        distance = calculate_distance(
-            float(session.latitude), float(session.longitude),
-            student_latitude, student_longitude
-        )
-        
-        if distance > session.radius_meters:
-            return jsonify({'error': f'You are {distance:.0f}m away from the class location. Please move closer (within {session.radius_meters}m)'}), 400
+        # Get student's location
+        try:
+            student_latitude = float(request.form.get('latitude', 0))
+            student_longitude = float(request.form.get('longitude', 0))
+            
+            # Verify location (within 300m radius)
+            if session.latitude and session.longitude:
+                distance = calculate_distance(
+                    float(session.latitude), float(session.longitude),
+                    student_latitude, student_longitude
+                )
+                
+                if distance > session.radius_meters:
+                    return jsonify({
+                        'error': f'You are {distance:.0f}m away from the class location. Please move closer (within {session.radius_meters}m)'
+                    }), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'Invalid location data'}), 400
         
         # Mark attendance
         attendance = Attendance(
             student_id=student.id,
             session_id=session_id,
-            status='present',
             latitude=student_latitude,
             longitude=student_longitude
         )
@@ -1193,21 +1198,21 @@ def export_attendance(session_id, format):
         flash('Access denied')
         return redirect(url_for('teacher_dashboard'))
     
-    # Get attendance records
-    attendances = db.session.query(Attendance, Student).join(Student).filter(
-        Attendance.session_id == session_id
-    ).all()
+    # Get attendance records and all students
+    attendances = Attendance.query.filter_by(session_id=session_id).all()
+    students = Student.query.filter_by(course_id=course.id).all()
     
     # Prepare data
     attendance_data = []
-    for attendance, student in attendances:
+    for student in students:
+        attendance = next((a for a in attendances if a.student_id == student.id), None)
         attendance_data.append({
             'Name': student.name,
             'Matricule': student.matricule,
             'Sex': student.sex,
-            'Status': attendance.status,
-            'Time Marked': attendance.created_at.strftime('%H:%M:%S'),
-            'Date': attendance.created_at.strftime('%Y-%m-%d')
+            'Status': 'Present' if attendance else 'Absent',
+            'Time Marked': attendance.marked_at.strftime('%H:%M:%S') if attendance else 'N/A',
+            'Date': attendance.marked_at.strftime('%Y-%m-%d') if attendance else 'N/A'
         })
     
     if format == 'excel':
@@ -1242,20 +1247,24 @@ def export_to_excel(attendance_data, session, course):
             worksheet.insert_rows(1, 3)
             worksheet['A1'] = f"Course: {course.name} ({course.code})"
             worksheet['A2'] = f"Session: {session.session_name}"
-            worksheet['A3'] = f"Date: {session.session_date}"
+            worksheet['A3'] = f"Date: {session.created_at.strftime('%Y-%m-%d')}"
             worksheet['A4'] = f"Teacher: {course.teacher.full_name}"
             
             # Style the header
-            from openpyxl.styles import Font, PatternFill
-            header_font = Font(bold=True, size=12)
-            header_fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
-            
-            for row in range(1, 5):
-                for col in range(1, 7):
-                    cell = worksheet.cell(row=row, column=col)
-                    cell.font = header_font
-                    if row <= 4:
-                        cell.fill = header_fill
+            try:
+                from openpyxl.styles import Font, PatternFill
+                header_font = Font(bold=True, size=12)
+                header_fill = PatternFill(start_color="CCCCCC", end_color="CCCCCC", fill_type="solid")
+                
+                for row in range(1, 5):
+                    for col in range(1, 7):
+                        cell = worksheet.cell(row=row, column=col)
+                        cell.font = header_font
+                        if row <= 4:
+                            cell.fill = header_fill
+            except ImportError:
+                # If openpyxl is not available, continue without styling
+                print("Warning: openpyxl styling not available")
         
         return send_file(filepath, as_attachment=True, download_name=filename)
         
@@ -1287,7 +1296,7 @@ def export_to_pdf(attendance_data, session, course):
         course_info = f"""
         <b>Course:</b> {course.name} ({course.code})<br/>
         <b>Session:</b> {session.session_name}<br/>
-        <b>Date:</b> {session.session_date}<br/>
+        <b>Date:</b> {session.created_at.strftime('%Y-%m-%d')}<br/>
         <b>Teacher:</b> {course.teacher.full_name}<br/>
         <b>Total Present:</b> {len(attendance_data)}<br/>
         <b>Generated:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}

@@ -86,6 +86,67 @@
     </div>
 </div>
 
+<!-- Gender Attendance Distribution -->
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5><i class="fas fa-chart-pie"></i> Attendance by Gender</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <canvas id="genderAttendanceChart" width="400" height="300"></canvas>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>Gender</th>
+                                        <th>Total Students</th>
+                                        <th>Average Attendance Rate</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% set male_stats = attendance_stats | selectattr('student.sex', 'equalto', 'Male') | list %}
+                                    {% set female_stats = attendance_stats | selectattr('student.sex', 'equalto', 'Female') | list %}
+                                    
+                                    {% set male_avg = (male_stats | sum(attribute='attendance_rate') / male_stats | length) if male_stats else 0 %}
+                                    {% set female_avg = (female_stats | sum(attribute='attendance_rate') / female_stats | length) if female_stats else 0 %}
+                                    
+                                    <tr>
+                                        <td>Male</td>
+                                        <td>{{ male_stats | length }}</td>
+                                        <td>
+                                            <div class="progress">
+                                                <div class="progress-bar bg-primary" style="width: {{ male_avg }}%">
+                                                    {{ "%.1f" | format(male_avg) }}%
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td>Female</td>
+                                        <td>{{ female_stats | length }}</td>
+                                        <td>
+                                            <div class="progress">
+                                                <div class="progress-bar bg-danger" style="width: {{ female_avg }}%">
+                                                    {{ "%.1f" | format(female_avg) }}%
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Student Attendance Details -->
 <div class="row">
     <div class="col-md-12">
@@ -187,6 +248,38 @@ const genderChart = new Chart(ctx, {
         plugins: {
             legend: {
                 position: 'bottom'
+            }
+        }
+    }
+});
+
+// New gender attendance chart
+const genderAttendanceCtx = document.getElementById('genderAttendanceChart').getContext('2d');
+new Chart(genderAttendanceCtx, {
+    type: 'bar',
+    data: {
+        labels: ['Male', 'Female'],
+        datasets: [{
+            label: 'Average Attendance Rate (%)',
+            data: [{{ male_avg }}, {{ female_avg }}],
+            backgroundColor: ['#007bff', '#dc3545']
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: 100,
+                title: {
+                    display: true,
+                    text: 'Attendance Rate (%)'
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                display: false
             }
         }
     }

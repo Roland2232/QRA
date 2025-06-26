@@ -36,6 +36,18 @@
             font-size: 1.2rem;
         }
         
+        .navbar-brand img {
+            height: 40px;
+            width: auto;
+            margin-right: 10px;
+            border-radius: 4px;
+            transition: all 0.3s ease;
+        }
+        
+        .navbar-brand:hover img {
+            transform: scale(1.05);
+        }
+        
         .card {
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             margin-bottom: 20px;
@@ -194,6 +206,10 @@
                 font-size: 1.1rem;
             }
             
+            .navbar-brand img {
+                height: 35px;
+            }
+            
             .navbar-nav {
                 text-align: center;
                 margin-top: 10px;
@@ -296,6 +312,10 @@
                 font-size: 1rem;
             }
             
+            .navbar-brand img {
+                height: 30px;
+            }
+            
             h1 {
                 font-size: 24px;
             }
@@ -380,7 +400,7 @@
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
         <div class="container">
             <a class="navbar-brand d-flex align-items-center" href="{{ url_for('home') }}">
-                <i class="fas fa-qrcode me-2"></i>
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="School Logo">
                 <span class="d-none d-sm-inline">QR Attendance System</span>
                 <span class="d-inline d-sm-none">QR Attendance</span>
             </a>

@@ -40,12 +40,8 @@
                     <small class="d-block text-break" style="font-size: 0.7em;">{{ external_url('student_registration', course_id=course.id) }}</small>
                 </div>
                 <a href="/static/qr_codes/{{ course.registration_qr_code }}" 
-                   class="btn btn-light btn-sm me-1" target="_blank">
+                   class="btn btn-light btn-sm" target="_blank">
                     <i class="fas fa-eye"></i> View QR Code
-                </a>
-                <a href="{{ external_url('student_registration', course_id=course.id) }}" 
-                   class="btn btn-outline-light btn-sm" target="_blank">
-                    <i class="fas fa-external-link-alt"></i> Test Page
                 </a>
             </div>
         </div>
@@ -128,12 +124,6 @@
                                     <strong>Registration URL:</strong><br>
                                     <small class="text-primary">{{ external_url('student_registration', course_id=course.id) }}</small>
                                 </div>
-                                <div class="mt-2">
-                                    <a href="{{ external_url('student_registration', course_id=course.id) }}" 
-                                       class="btn btn-sm btn-outline-primary" target="_blank">
-                                        <i class="fas fa-external-link-alt"></i> Test Registration Page
-                                    </a>
-                                </div>
                                 {% else %}
                                 <p class="text-muted">QR Code not generated yet</p>
                                 {% endif %}
@@ -201,10 +191,14 @@
                                 <td>
                                     <div class="btn-group" role="group">
                                         {% if session.is_active and not session.is_expired() %}
-                                        <a href="/static/qr_codes/{{ session.qr_code_path }}" 
-                                           class="btn btn-sm btn-outline-primary" target="_blank">
-                                            <i class="fas fa-qrcode"></i> View QR
-                                        </a>
+                                        <div class="d-flex flex-column align-items-center">
+                                            <a href="/static/qr_codes/{{ session.qr_code_path }}" 
+                                               class="btn btn-sm btn-outline-primary mb-2" target="_blank">
+                                                <i class="fas fa-qrcode"></i> View QR
+                                            </a>
+                                            <small class="text-muted d-block mb-2">Attendance URL:</small>
+                                            <small class="text-break" style="font-size: 0.7em;">{{ external_url('take_attendance', session_id=session.id) }}</small>
+                                        </div>
                                         <a href="{{ url_for('end_attendance_session', session_id=session.id) }}" 
                                            class="btn btn-sm btn-outline-warning"
                                            onclick="return confirm('End this session?')">

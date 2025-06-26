@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Render-compatible version of QR Attendance System
+PostgreSQL-optimized with comprehensive error handling
 """
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
@@ -17,7 +18,6 @@ import string
 from datetime import datetime, timedelta
 from PIL import Image
 from geopy.distance import geodesic
-import pymysql
 from models import db, Admin, Teacher, Course, Student, AttendanceSession, Attendance
 import pandas as pd
 from reportlab.lib.pagesizes import letter
@@ -25,7 +25,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from functools import wraps
-from render_config import RenderConfig
+from render_config import RenderConfig, validate_render_env
 
 def create_app():
     """Application factory for Render deployment"""
@@ -38,6 +38,7 @@ def create_app():
     app.config['SECRET_KEY'] = config.SECRET_KEY
     app.config['SQLALCHEMY_DATABASE_URI'] = config.SQLALCHEMY_DATABASE_URI
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = config.SQLALCHEMY_TRACK_MODIFICATIONS
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = config.SQLALCHEMY_ENGINE_OPTIONS
     
     # Email Configuration
     app.config['MAIL_SERVER'] = config.MAIL_SERVER
@@ -90,6 +91,10 @@ def create_app():
         return ''.join(secrets.choice(characters) for _ in range(length))
 
     def send_email(to, subject, template, **kwargs):
+        if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
+            print("❌ Email not configured - skipping email send")
+            return False
+            
         msg = Message(
             subject=subject,
             recipients=[to],
@@ -98,9 +103,10 @@ def create_app():
         )
         try:
             mail.send(msg)
+            print(f"✅ Email sent successfully to {to}")
             return True
         except Exception as e:
-            print(f"Failed to send email: {e}")
+            print(f"❌ Failed to send email: {e}")
             return False
 
     def generate_qr_code(data, filename):
@@ -126,8 +132,11 @@ def create_app():
         with app.test_request_context():
             path = url_for(endpoint, **values)
         
-        # Use Render's external URL if available
-        base_url = config.RENDER_EXTERNAL_URL or request.host_url.rstrip('/')
+        # Use Render's external URL if available, otherwise use request host
+        if config.RENDER_EXTERNAL_URL:
+            base_url = config.RENDER_EXTERNAL_URL.rstrip('/')
+        else:
+            base_url = request.host_url.rstrip('/')
         return f"{base_url}{path}"
 
     # Make external URL function available in templates
@@ -160,7 +169,14 @@ def create_app():
                             password_hash=generate_password_hash('admin123')
                         )
                         db.session.add(admin)
-                        db.session.commit()
+                        try:
+                            db.session.commit()
+                            print("✅ Admin user created successfully")
+                        except Exception as e:
+                            print(f"❌ Error creating admin user: {e}")
+                            db.session.rollback()
+                            flash('Database error - please try again', 'error')
+                            return render_template('login.html')
                     
                     login_user(admin)
                     return redirect(url_for('admin_dashboard'))
@@ -186,6 +202,44 @@ def create_app():
         logout_user()
         return redirect(url_for('login'))
 
+    @app.route('/change_password', methods=['GET', 'POST'])
+    @login_required
+    def change_password():
+        if not isinstance(current_user, Teacher):
+            flash('Access denied', 'error')
+            return redirect(url_for('login'))
+        
+        if request.method == 'POST':
+            current_password = request.form.get('current_password')
+            new_password = request.form.get('new_password')
+            confirm_password = request.form.get('confirm_password')
+            
+            if not check_password_hash(current_user.password_hash, current_password):
+                flash('Current password is incorrect', 'error')
+                return render_template('change_password.html')
+            
+            if new_password != confirm_password:
+                flash('New passwords do not match', 'error')
+                return render_template('change_password.html')
+            
+            if len(new_password) < 6:
+                flash('Password must be at least 6 characters long', 'error')
+                return render_template('change_password.html')
+            
+            # Update password
+            current_user.password_hash = generate_password_hash(new_password)
+            current_user.must_change_password = False
+            
+            try:
+                db.session.commit()
+                flash('Password changed successfully!', 'success')
+                return redirect(url_for('teacher_dashboard'))
+            except Exception as e:
+                db.session.rollback()
+                flash('Error changing password - please try again', 'error')
+        
+        return render_template('change_password.html')
+
     @app.route('/admin/dashboard')
     @login_required
     def admin_dashboard():
@@ -207,24 +261,551 @@ def create_app():
         courses = Course.query.filter_by(teacher_id=current_user.id).all()
         return render_template('teacher_dashboard.html', courses=courses)
 
+    @app.route('/teacher/create_course', methods=['GET', 'POST'])
+    @login_required
+    @teacher_password_required
+    def create_course():
+        if not isinstance(current_user, Teacher):
+            flash('Access denied', 'error')
+            return redirect(url_for('login'))
+        
+        if request.method == 'POST':
+            course_name = request.form['course_name']
+            course_code = request.form['course_code']
+            description = request.form.get('description', '')
+            
+            # Check if course code already exists for this teacher
+            existing_course = Course.query.filter_by(
+                course_code=course_code, 
+                teacher_id=current_user.id
+            ).first()
+            
+            if existing_course:
+                flash('Course code already exists for your courses', 'error')
+                return render_template('create_course.html')
+            
+            course = Course(
+                course_name=course_name,
+                course_code=course_code,
+                description=description,
+                teacher_id=current_user.id
+            )
+            
+            try:
+                db.session.add(course)
+                db.session.commit()
+                flash('Course created successfully!', 'success')
+                return redirect(url_for('teacher_dashboard'))
+            except Exception as e:
+                db.session.rollback()
+                flash('Error creating course - please try again', 'error')
+        
+        return render_template('create_course.html')
+
+    @app.route('/teacher/course/<course_id>')
+    @login_required
+    @teacher_password_required
+    def course_details(course_id):
+        course = Course.query.get_or_404(course_id)
+        
+        if course.teacher_id != current_user.id:
+            flash('Access denied', 'error')
+            return redirect(url_for('teacher_dashboard'))
+        
+        students = Student.query.filter_by(course_id=course_id).all()
+        sessions = AttendanceSession.query.filter_by(course_id=course_id).order_by(AttendanceSession.created_at.desc()).all()
+        
+        return render_template('course_details.html', course=course, students=students, sessions=sessions)
+
     @app.route('/health')
     def health_check():
         """Health check endpoint for Render"""
-        return {'status': 'healthy', 'timestamp': datetime.utcnow().isoformat()}
+        try:
+            # Test database connection
+            db.session.execute('SELECT 1')
+            db_status = "healthy"
+        except Exception as e:
+            db_status = f"error: {str(e)}"
+        
+        return {
+            'status': 'healthy' if db_status == "healthy" else 'unhealthy',
+            'timestamp': datetime.utcnow().isoformat(),
+            'database': db_status,
+            'email_configured': bool(app.config['MAIL_USERNAME'] and app.config['MAIL_PASSWORD'])
+        }
 
-    # Create database tables
+    @app.route('/admin/create_teacher', methods=['GET', 'POST'])
+    @login_required
+    def create_teacher():
+        if not isinstance(current_user, Admin):
+            flash('Access denied', 'error')
+            return redirect(url_for('login'))
+        
+        if request.method == 'POST':
+            username = request.form.get('username')
+            email = request.form.get('email')
+            full_name = request.form.get('full_name')
+            
+            # Generate random password
+            temp_password = generate_password()
+            
+            # Create teacher
+            teacher = Teacher(
+                username=username,
+                email=email,
+                full_name=full_name,
+                password_hash=generate_password_hash(temp_password),
+                created_by=current_user.id
+            )
+            
+            try:
+                db.session.add(teacher)
+                db.session.commit()
+                
+                # Send email with credentials
+                email_template = f"""
+                <h2>Welcome to QR Attendance System</h2>
+                <p>Hello {full_name},</p>
+                <p>Your teacher account has been created. Here are your login credentials:</p>
+                <p><strong>Username:</strong> {username}</p>
+                <p><strong>Temporary Password:</strong> {temp_password}</p>
+                <p>Please login and change your password immediately.</p>
+                <p>Login URL: {get_external_url('login')}</p>
+                """
+                
+                if send_email(email, "QR Attendance System - Account Created", email_template):
+                    flash(f'Teacher {full_name} created successfully! Credentials sent to {email}', 'success')
+                else:
+                    flash(f'Teacher {full_name} created successfully! Please manually share credentials: Username: {username}, Password: {temp_password}', 'warning')
+                
+                return redirect(url_for('admin_dashboard'))
+                
+            except Exception as e:
+                db.session.rollback()
+                print(f"❌ Error creating teacher: {e}")
+                flash('Error creating teacher - please try again', 'error')
+        
+        return render_template('create_teacher.html')
+
+    @app.route('/student/register/<course_id>', methods=['GET', 'POST'])
+    def student_registration(course_id):
+        course = Course.query.get_or_404(course_id)
+        
+        if request.method == 'POST':
+            name = request.form['name']
+            matricule = request.form['matricule']
+            sex = request.form['sex']
+            
+            # Check if student is already registered for THIS specific course
+            existing_registration = Student.query.filter_by(matricule=matricule, course_id=course_id).first()
+            if existing_registration:
+                return jsonify({'error': 'You are already registered for this course'}), 400
+            
+            # Check if student exists in other courses to get consistent name/sex
+            existing_student = Student.query.filter_by(matricule=matricule).first()
+            if existing_student:
+                # Use existing student's name and sex for consistency
+                if existing_student.name != name or existing_student.sex != sex:
+                    return jsonify({
+                        'error': f'Student with matricule {matricule} already exists with different details. Please use: Name: {existing_student.name}, Sex: {existing_student.sex}'
+                    }), 400
+            
+            # Create new registration for this course
+            student = Student(
+                name=name,
+                matricule=matricule,
+                sex=sex,
+                course_id=course_id
+            )
+            
+            try:
+                db.session.add(student)
+                db.session.commit()
+                
+                # Get student's total course count for response
+                total_courses = Student.query.filter_by(matricule=matricule).count()
+                
+                return jsonify({
+                    'success': f'Registration successful! You are now registered for {total_courses} course(s).'
+                })
+            except Exception as e:
+                db.session.rollback()
+                return jsonify({'error': f'Registration failed: {str(e)}'}), 500
+        
+        return render_template('student_registration.html', course=course)
+
+    @app.route('/attendance/<session_id>', methods=['GET', 'POST'])
+    def take_attendance(session_id):
+        session = AttendanceSession.query.get_or_404(session_id)
+        
+        # Check if session is expired
+        if session.is_expired():
+            return render_template('error.html', 
+                                 message=f'This attendance session has expired. Sessions are only valid for 15 minutes.')
+        
+        if not session.is_active:
+            return render_template('error.html', message='This attendance session is no longer active')
+        
+        course = Course.query.get(session.course_id)
+        students = Student.query.filter_by(course_id=course.id).all()
+        
+        if request.method == 'POST':
+            selected_matricule = request.form['selected_matricule']
+            student_latitude = float(request.form['latitude'])
+            student_longitude = float(request.form['longitude'])
+            
+            # Find student by matricule in this course
+            student = Student.query.filter_by(matricule=selected_matricule, course_id=course.id).first()
+            if not student:
+                return jsonify({'error': 'Invalid matricule selection'}), 400
+            
+            # Check if student already marked attendance
+            existing_attendance = Attendance.query.filter_by(
+                student_id=student.id,
+                session_id=session_id
+            ).first()
+            
+            if existing_attendance:
+                return jsonify({'error': 'Attendance already marked for this session'}), 400
+            
+            # Verify location (within 300m radius)
+            distance = calculate_distance(
+                float(session.latitude), float(session.longitude),
+                student_latitude, student_longitude
+            )
+            
+            if distance > session.radius_meters:
+                return jsonify({'error': f'You are {distance:.0f}m away from the class location. Please move closer (within {session.radius_meters}m)'}), 400
+            
+            # Mark attendance
+            attendance = Attendance(
+                student_id=student.id,
+                session_id=session_id,
+                status='present',
+                latitude=student_latitude,
+                longitude=student_longitude
+            )
+            
+            db.session.add(attendance)
+            db.session.commit()
+            
+            return jsonify({
+                'success': f'Attendance marked successfully!',
+                'student_name': student.name,
+                'student_matricule': student.matricule,
+                'student_sex': student.sex,
+                'time_remaining': session.minutes_remaining()
+            })
+        
+        return render_template('take_attendance.html', session=session, course=course, students=students)
+
+    @app.route('/teacher/create_attendance_session/<course_id>', methods=['GET', 'POST'])
+    @login_required
+    @teacher_password_required
+    def create_attendance_session(course_id):
+        course = Course.query.get_or_404(course_id)
+        
+        if course.teacher_id != current_user.id:
+            flash('Access denied', 'error')
+            return redirect(url_for('teacher_dashboard'))
+        
+        if request.method == 'POST':
+            session_name = request.form['session_name']
+            latitude = float(request.form['latitude'])
+            longitude = float(request.form['longitude'])
+            radius = int(request.form.get('radius', 300))
+            
+            session = AttendanceSession(
+                session_name=session_name,
+                course_id=course_id,
+                latitude=latitude,
+                longitude=longitude,
+                radius_meters=radius,
+                created_by=current_user.id
+            )
+            
+            try:
+                db.session.add(session)
+                db.session.commit()
+                
+                # Generate QR code for the session
+                qr_data = get_external_url('take_attendance', session_id=session.id)
+                qr_filename = f'session_{session.id}.png'
+                generate_qr_code(qr_data, qr_filename)
+                
+                flash('Attendance session created successfully!', 'success')
+                return redirect(url_for('course_details', course_id=course_id))
+            except Exception as e:
+                db.session.rollback()
+                flash('Error creating session - please try again', 'error')
+        
+        return render_template('create_attendance_session.html', course=course)
+
+    @app.route('/teacher/end_session/<session_id>')
+    @login_required
+    @teacher_password_required
+    def end_attendance_session(session_id):
+        session = AttendanceSession.query.get_or_404(session_id)
+        course = Course.query.get(session.course_id)
+        
+        if course.teacher_id != current_user.id:
+            flash('Access denied', 'error')
+            return redirect(url_for('teacher_dashboard'))
+        
+        session.is_active = False
+        session.ended_at = datetime.utcnow()
+        
+        try:
+            db.session.commit()
+            flash('Attendance session ended successfully!', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash('Error ending session - please try again', 'error')
+        
+        return redirect(url_for('course_details', course_id=session.course_id))
+
+    @app.route('/student/profile/<matricule>')
+    def student_profile(matricule):
+        students = Student.query.filter_by(matricule=matricule).all()
+        
+        if not students:
+            return render_template('error.html', message='Student not found')
+        
+        # Group by courses
+        student_data = {}
+        for student in students:
+            course = Course.query.get(student.course_id)
+            teacher = Teacher.query.get(course.teacher_id)
+            
+            attendance_records = Attendance.query.join(AttendanceSession).filter(
+                Attendance.student_id == student.id
+            ).all()
+            
+            student_data[course.course_name] = {
+                'course': course,
+                'teacher': teacher,
+                'student': student,
+                'attendance_count': len(attendance_records),
+                'attendance_records': attendance_records
+            }
+        
+        return render_template('student_profile.html', 
+                             matricule=matricule,
+                             student_data=student_data)
+
+    @app.route('/teacher/course_analytics/<course_id>')
+    @login_required
+    @teacher_password_required
+    def course_analytics(course_id):
+        course = Course.query.get_or_404(course_id)
+        
+        if course.teacher_id != current_user.id:
+            flash('Access denied', 'error')
+            return redirect(url_for('teacher_dashboard'))
+        
+        # Get all students and sessions for this course
+        students = Student.query.filter_by(course_id=course_id).all()
+        sessions = AttendanceSession.query.filter_by(course_id=course_id).all()
+        
+        # Calculate analytics
+        total_students = len(students)
+        total_sessions = len(sessions)
+        
+        # Attendance statistics
+        attendance_data = []
+        student_attendance = {}
+        
+        for session in sessions:
+            attendances = Attendance.query.filter_by(session_id=session.id).all()
+            attendance_count = len(attendances)
+            attendance_rate = (attendance_count / total_students * 100) if total_students > 0 else 0
+            
+            attendance_data.append({
+                'session': session,
+                'attendance_count': attendance_count,
+                'attendance_rate': round(attendance_rate, 1)
+            })
+            
+            # Track individual student attendance
+            for attendance in attendances:
+                student = Student.query.get(attendance.student_id)
+                if student.matricule not in student_attendance:
+                    student_attendance[student.matricule] = {
+                        'student': student,
+                        'sessions_attended': 0,
+                        'attendance_rate': 0
+                    }
+                student_attendance[student.matricule]['sessions_attended'] += 1
+        
+        # Calculate individual attendance rates
+        for matricule, data in student_attendance.items():
+            data['attendance_rate'] = round((data['sessions_attended'] / total_sessions * 100) if total_sessions > 0 else 0, 1)
+        
+        return render_template('course_analytics.html',
+                             course=course,
+                             students=students,
+                             sessions=sessions,
+                             attendance_data=attendance_data,
+                             student_attendance=student_attendance,
+                             total_students=total_students,
+                             total_sessions=total_sessions)
+
+    @app.route('/teacher/export_attendance/<session_id>/<format>')
+    @login_required
+    @teacher_password_required
+    def export_attendance(session_id, format):
+        session = AttendanceSession.query.get_or_404(session_id)
+        course = Course.query.get(session.course_id)
+        
+        if course.teacher_id != current_user.id:
+            flash('Access denied', 'error')
+            return redirect(url_for('teacher_dashboard'))
+        
+        # Get attendance data
+        attendances = Attendance.query.filter_by(session_id=session_id).all()
+        students = Student.query.filter_by(course_id=course.id).all()
+        
+        # Prepare data
+        attendance_data = []
+        for student in students:
+            attendance = next((a for a in attendances if a.student_id == student.id), None)
+            attendance_data.append({
+                'Name': student.name,
+                'Matricule': student.matricule,
+                'Sex': student.sex,
+                'Status': 'Present' if attendance else 'Absent',
+                'Time': attendance.marked_at.strftime('%Y-%m-%d %H:%M:%S') if attendance else 'N/A'
+            })
+        
+        if format.lower() == 'excel':
+            return export_to_excel(attendance_data, session, course)
+        elif format.lower() == 'pdf':
+            return export_to_pdf(attendance_data, session, course)
+        else:
+            flash('Invalid export format', 'error')
+            return redirect(url_for('course_details', course_id=course.id))
+
+    def export_to_excel(attendance_data, session, course):
+        """Export attendance data to Excel format"""
+        import io
+        df = pd.DataFrame(attendance_data)
+        
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name=f'{course.course_code}_Attendance', index=False)
+            
+            # Add summary sheet
+            summary_data = {
+                'Course': [course.course_name],
+                'Course Code': [course.course_code],
+                'Session': [session.session_name],
+                'Date': [session.created_at.strftime('%Y-%m-%d %H:%M:%S')],
+                'Total Students': [len(attendance_data)],
+                'Present': [len([d for d in attendance_data if d['Status'] == 'Present'])],
+                'Absent': [len([d for d in attendance_data if d['Status'] == 'Absent'])]
+            }
+            summary_df = pd.DataFrame(summary_data)
+            summary_df.to_excel(writer, sheet_name='Summary', index=False)
+        
+        output.seek(0)
+        filename = f"{course.course_code}_{session.session_name.replace(' ', '_')}_attendance.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    def export_to_pdf(attendance_data, session, course):
+        """Export attendance data to PDF format"""
+        import io
+        from reportlab.lib.units import inch
+        
+        output = io.BytesIO()
+        doc = SimpleDocTemplate(output, pagesize=letter, topMargin=0.5*inch)
+        
+        # Container for the 'Flowable' objects
+        elements = []
+        styles = getSampleStyleSheet()
+        
+        # Title
+        title = Paragraph(f"<b>{course.course_name} - Attendance Report</b>", styles['Title'])
+        elements.append(title)
+        elements.append(Spacer(1, 12))
+        
+        # Session info
+        session_info = f"""
+        <b>Course Code:</b> {course.course_code}<br/>
+        <b>Session:</b> {session.session_name}<br/>
+        <b>Date:</b> {session.created_at.strftime('%Y-%m-%d %H:%M:%S')}<br/>
+        <b>Total Students:</b> {len(attendance_data)}<br/>
+        <b>Present:</b> {len([d for d in attendance_data if d['Status'] == 'Present'])}<br/>
+        <b>Absent:</b> {len([d for d in attendance_data if d['Status'] == 'Absent'])}
+        """
+        elements.append(Paragraph(session_info, styles['Normal']))
+        elements.append(Spacer(1, 20))
+        
+        # Attendance table
+        table_data = [['Name', 'Matricule', 'Sex', 'Status', 'Time']]
+        for record in attendance_data:
+            table_data.append([
+                record['Name'],
+                record['Matricule'],
+                record['Sex'],
+                record['Status'],
+                record['Time']
+            ])
+        
+        table = Table(table_data, colWidths=[2*inch, 1.5*inch, 0.8*inch, 1*inch, 1.5*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+        ]))
+        
+        elements.append(table)
+        doc.build(elements)
+        
+        output.seek(0)
+        filename = f"{course.course_code}_{session.session_name.replace(' ', '_')}_attendance.pdf"
+        
+        return send_file(
+            output,
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+
+    # Create database tables with error handling
     with app.app_context():
         try:
+            print("🔧 Creating database tables...")
             db.create_all()
             print("✅ Database tables created successfully")
         except Exception as e:
             print(f"❌ Error creating database tables: {e}")
+            print("This might be normal on first deployment - tables will be created on first request")
 
     return app
 
 # Create the Flask application
 app = create_app()
 
+# Validate environment on startup
+print("🔍 Validating Render environment...")
+if not validate_render_env():
+    print("⚠️  Some environment variables are missing - app may not function correctly")
+else:
+    print("✅ Environment validation passed")
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
+    print(f"🚀 Starting QR Attendance System on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False) 

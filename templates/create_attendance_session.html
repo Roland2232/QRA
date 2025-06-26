@@ -12,9 +12,28 @@
                 <p class="mb-0"><small>⏰ Sessions are valid for 15 minutes only</small></p>
             </div>
             <div class="card-body">
+                <!-- Location Setup Section -->
+                <div class="alert alert-info mb-4">
+                    <h5><i class="fas fa-map-marker-alt"></i> Location Setup</h5>
+                    <p class="mb-2">Please capture your current location to set the attendance radius.</p>
+                    <button type="button" id="captureLocation" class="btn btn-primary">
+                        <i class="fas fa-location-arrow"></i> Capture Current Location
+                    </button>
+                    <div id="locationStatus" class="mt-2" style="display: none;">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            <span>Location captured successfully!</span>
+                        </div>
+                        <small class="text-muted" id="locationDetails"></small>
+                    </div>
+                </div>
+
                 <form method="POST" id="attendanceForm">
+                    <input type="hidden" id="latitude" name="latitude">
+                    <input type="hidden" id="longitude" name="longitude">
+                    
                     <div class="row">
-                        <div class="col-12 col-md-6">
+                        <div class="col-12">
                             <div class="mb-3">
                                 <label for="session_name" class="form-label fw-bold">
                                     <i class="fas fa-tag text-success"></i> Session Name *
@@ -27,7 +46,8 @@
                                        placeholder="e.g., Week 1 Lecture">
                             </div>
                         </div>
-                        <div class="col-12 col-md-6">
+                        
+                        <div class="col-12">
                             <div class="mb-3">
                                 <label class="form-label fw-bold">
                                     <i class="fas fa-calendar text-success"></i> Session Date
@@ -47,56 +67,21 @@
                         Make sure students scan the QR code within this time frame.
                     </div>
                     
-                    <div class="alert alert-info">
-                        <i class="fas fa-map-marker-alt"></i>
-                        <strong>Location Setup:</strong> Click the button below to capture your current location. 
-                        Students will need to be within 300 meters of this location to mark attendance.
-                        <br><small>📱 Please allow location access when prompted by your browser.</small>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">
-                            <i class="fas fa-location-arrow text-success"></i> Teacher's Current Location
-                        </label>
-                        <div class="d-grid">
-                            <button type="button" 
-                                    class="btn btn-outline-success btn-lg" 
-                                    id="getLocationBtn"
-                                    onclick="getCurrentLocation()">
-                                <i class="fas fa-crosshairs"></i> Capture My Location (Required)
-                            </button>
-                        </div>
-                        <div id="locationInfo" class="mt-3" style="display: none;">
-                            <div class="alert alert-success">
-                                <i class="fas fa-check-circle"></i>
-                                <strong>✅ Location captured successfully!</strong>
-                                <br><small>Latitude: <span id="latDisplay"></span></small>
-                                <br><small>Longitude: <span id="lngDisplay"></span></small>
-                                <br><small>🎯 Students must be within 300m of this location</small>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <input type="hidden" id="latitude" name="latitude">
-                    <input type="hidden" id="longitude" name="longitude">
-                    
-                    <div class="d-grid">
-                        <button type="submit" 
-                                class="btn btn-success btn-lg py-3" 
-                                id="submitBtn"
-                                disabled>
-                            <i class="fas fa-qrcode"></i> Create Session & Generate QR Code
-                            <br><small>(Valid for 15 minutes)</small>
+                    <div class="text-center mt-4">
+                        <button type="submit" class="btn btn-success" id="createSessionBtn" disabled>
+                            <i class="fas fa-calendar-plus"></i> Create Session
                         </button>
+                        <a href="{{ url_for('course_details', course_id=course.id) }}" class="btn btn-secondary ms-2">
+                            <i class="fas fa-times"></i> Cancel
+                        </a>
                     </div>
                     
                     <div class="mt-3">
                         <small class="text-muted">
                             <i class="fas fa-info-circle"></i>
-                            After creating the session, students will scan the QR code to:
-                            1) Verify their identity with biometrics
-                            2) Select their matricule from a list
-                            3) Confirm their location within 300m
+                            After creating the session, students will:
+                            1) Select their matricule from a list
+                            2) Mark their attendance
                         </small>
                     </div>
                 </form>
@@ -108,95 +93,107 @@
 
 {% block scripts %}
 <script>
-let locationCaptured = false;
+document.addEventListener('DOMContentLoaded', function() {
+    const captureLocationBtn = document.getElementById('captureLocation');
+    const locationStatus = document.getElementById('locationStatus');
+    const locationDetails = document.getElementById('locationDetails');
+    const createSessionBtn = document.getElementById('createSessionBtn');
+    const latitudeInput = document.getElementById('latitude');
+    const longitudeInput = document.getElementById('longitude');
 
-function getCurrentLocation() {
-    const btn = document.getElementById('getLocationBtn');
-    const submitBtn = document.getElementById('submitBtn');
+    captureLocationBtn.addEventListener('click', function() {
+        if (navigator.geolocation) {
+            captureLocationBtn.disabled = true;
+            captureLocationBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Capturing Location...';
+            
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    
+                    // Store coordinates
+                    latitudeInput.value = lat;
+                    longitudeInput.value = lng;
+                    
+                    // Enable create session button
+                    createSessionBtn.disabled = false;
+                    
+                    // Show success message
+                    locationStatus.style.display = 'block';
+                    locationDetails.textContent = `Latitude: ${lat.toFixed(6)}, Longitude: ${lng.toFixed(6)}`;
+                    
+                    // Update button
+                    captureLocationBtn.disabled = false;
+                    captureLocationBtn.innerHTML = '<i class="fas fa-sync"></i> Update Location';
+                },
+                function(error) {
+                    alert('Error capturing location: ' + error.message);
+                    captureLocationBtn.disabled = false;
+                    captureLocationBtn.innerHTML = '<i class="fas fa-location-arrow"></i> Try Again';
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
+                }
+            );
+        } else {
+            alert('Geolocation is not supported by your browser');
+        }
+    });
+});
+</script>
+
+<style>
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+    .card-body {
+        padding: 1.5rem !important;
+    }
     
-    if (navigator.geolocation) {
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Requesting Location Access...';
-        btn.disabled = true;
-        
-        // High accuracy location request
-        const options = {
-            enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 0
-        };
-        
-        navigator.geolocation.getCurrentPosition(
-            function(position) {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                const accuracy = position.coords.accuracy;
-                
-                document.getElementById('latitude').value = lat;
-                document.getElementById('longitude').value = lng;
-                document.getElementById('latDisplay').textContent = lat.toFixed(6);
-                document.getElementById('lngDisplay').textContent = lng.toFixed(6);
-                
-                document.getElementById('locationInfo').style.display = 'block';
-                btn.innerHTML = '<i class="fas fa-check"></i> Location Captured Successfully';
-                btn.classList.remove('btn-outline-success');
-                btn.classList.add('btn-success');
-                
-                locationCaptured = true;
-                submitBtn.disabled = false;
-                
-                // Show accuracy info
-                if (accuracy) {
-                    const accuracyInfo = document.createElement('small');
-                    accuracyInfo.innerHTML = `<br>📍 Accuracy: ±${Math.round(accuracy)}m`;
-                    document.getElementById('locationInfo').querySelector('.alert').appendChild(accuracyInfo);
-                }
-            },
-            function(error) {
-                btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Try Again';
-                btn.disabled = false;
-                
-                let message = '';
-                switch(error.code) {
-                    case error.PERMISSION_DENIED:
-                        message = '🚫 Location access denied!\n\nPlease:\n1. Click the location icon in your browser address bar\n2. Select "Always allow" for location access\n3. Refresh the page and try again';
-                        break;
-                    case error.POSITION_UNAVAILABLE:
-                        message = '📍 Location information is unavailable.\n\nPlease check your device\'s location settings.';
-                        break;
-                    case error.TIMEOUT:
-                        message = '⏰ Location request timed out.\n\nPlease try again or check your internet connection.';
-                        break;
-                    default:
-                        message = '❌ An unknown error occurred while getting location.';
-                        break;
-                }
-                
-                alert(message);
-            },
-            options
-        );
-    } else {
-        alert('🚫 Geolocation is not supported by this browser.\n\nPlease use a modern browser like Chrome, Firefox, or Safari.');
+    .form-control-lg {
+        font-size: 16px !important; /* Prevents zoom on iOS */
+        padding: 15px !important;
+        border-radius: 8px !important;
+    }
+    
+    .btn-lg {
+        padding: 15px 20px !important;
+        font-size: 18px !important;
+    }
+    
+    .alert {
+        font-size: 14px;
+    }
+    
+    h4 {
+        font-size: 1.4rem;
+    }
+    
+    h5 {
+        font-size: 1.2rem;
     }
 }
 
-document.getElementById('attendanceForm').addEventListener('submit', function(e) {
-    if (!locationCaptured) {
-        e.preventDefault();
-        alert('📍 Please capture your current location first!\n\nThis is required to set the attendance location for students.');
-        return false;
-    }
-    
-    const submitBtn = document.getElementById('submitBtn');
-    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating Session...';
-    submitBtn.disabled = true;
-});
+/* Touch-friendly enhancements */
+.form-control:focus {
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+    border-color: #86b7fe;
+}
 
-// Auto-set today's date
-document.addEventListener('DOMContentLoaded', function() {
-    const today = new Date();
-    const dateString = today.toISOString().split('T')[0];
-    document.getElementById('session_date').value = dateString;
-});
-</script>
+.btn:active {
+    transform: scale(0.98);
+}
+
+/* Loading animation */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.btn:disabled {
+    animation: pulse 1.5s infinite;
+}
+</style>
 {% endblock %}

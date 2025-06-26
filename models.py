@@ -51,7 +51,6 @@ class Student(db.Model):
     matricule = db.Column(db.String(50), nullable=False)
     sex = db.Column(db.String(10), nullable=False)
     photo_path = db.Column(db.String(255))
-    face_encoding = db.Column(db.Text)
     course_id = db.Column(db.String(50), db.ForeignKey('course.id'), nullable=False)
     registered_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
