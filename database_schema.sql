@@ -1,11 +1,3 @@
--- QR Code Student Attendance Management System
--- Complete Database Schema
--- Database: MariaDB/MySQL
--- User: remi, Password: 1234, Port: 3307
-
--- Create database (uncomment if needed)
--- CREATE DATABASE IF NOT EXISTS qr_attendance_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
--- USE qr_attendance_system;
 
 -- Create database user and grant privileges
 CREATE USER IF NOT EXISTS 'remi'@'localhost' IDENTIFIED BY '1234';
