@@ -153,6 +153,11 @@ def create_app():
         logout_user()
         return redirect(url_for('login'))
 
+    @app.route('/home')
+    def home():
+        """Original home page moved to /home route"""
+        return render_template('index.html')
+
     @app.route('/login', methods=['GET', 'POST'])
     def login():
         if request.method == 'POST':
