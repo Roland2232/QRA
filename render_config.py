@@ -17,11 +17,13 @@ class RenderConfig:
     # Database Configuration - PostgreSQL focused
     DATABASE_URL = os.environ.get('DATABASE_URL')
     
-    # Handle different PostgreSQL URL formats
+    # Handle different PostgreSQL URL formats and convert to psycopg3
     if DATABASE_URL:
         # Render sometimes provides postgres:// instead of postgresql://
         if DATABASE_URL.startswith('postgres://'):
-            DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
+            DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql+psycopg://', 1)
+        elif DATABASE_URL.startswith('postgresql://'):
+            DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
     else:
         # Fallback construction if DATABASE_URL not provided
         DB_HOST = os.environ.get('DB_HOST', 'localhost')
@@ -32,9 +34,9 @@ class RenderConfig:
         
         if DB_PASSWORD:
             password = quote_plus(DB_PASSWORD)
-            DATABASE_URL = f'postgresql://{DB_USER}:{password}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+            DATABASE_URL = f'postgresql+psycopg://{DB_USER}:{password}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
         else:
-            DATABASE_URL = f'postgresql://{DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+            DATABASE_URL = f'postgresql+psycopg://{DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
     
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
