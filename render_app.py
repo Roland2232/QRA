@@ -503,6 +503,31 @@ def create_app():
         
         return render_template('create_teacher.html')
 
+    @app.route('/admin/delete_teacher/<teacher_id>', methods=['POST'])
+    @login_required
+    def delete_teacher(teacher_id):
+        if not isinstance(current_user, Admin):
+            flash('Access denied', 'error')
+            return redirect(url_for('login'))
+        
+        teacher = Teacher.query.get_or_404(teacher_id)
+        
+        try:
+            # Get teacher info for confirmation message
+            teacher_name = teacher.full_name
+            teacher_username = teacher.username
+            
+            # Delete the teacher (cascade will handle related records)
+            db.session.delete(teacher)
+            db.session.commit()
+            
+            flash(f'Teacher "{teacher_name}" ({teacher_username}) has been successfully deleted', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error deleting teacher: {str(e)}', 'error')
+        
+        return redirect(url_for('admin_dashboard'))
+
     @app.route('/student/register/<course_id>', methods=['GET', 'POST'])
     def student_registration(course_id):
         course = Course.query.get_or_404(course_id)
@@ -875,6 +900,50 @@ def create_app():
                              male_students=male_students,
                              female_students=female_students)
 
+    @app.route('/teacher/students')
+    @login_required
+    @teacher_password_required
+    def teacher_students():
+        """View all students across all teacher's courses"""
+        if not isinstance(current_user, Teacher):
+            flash('Access denied', 'error')
+            return redirect(url_for('login'))
+        
+        # Get all courses taught by this teacher
+        courses = Course.query.filter_by(teacher_id=current_user.id).all()
+        
+        # Get all students from all courses
+        all_students = []
+        unique_matricules = set()
+        
+        for course in courses:
+            course_students = Student.query.filter_by(course_id=course.id).all()
+            for student in course_students:
+                all_students.append({
+                    'student': student,
+                    'course': course
+                })
+                unique_matricules.add(student.matricule)
+        
+        # Group students by matricule for summary
+        student_summary = []
+        for matricule in unique_matricules:
+            student_courses = [item for item in all_students if item['student'].matricule == matricule]
+            student_info = student_courses[0]['student']  # Get basic info
+            student_summary.append({
+                'matricule': matricule,
+                'name': student_info.name,
+                'sex': student_info.sex,
+                'total_courses': len(student_courses),
+                'courses': [item['course'].course_name for item in student_courses]
+            })
+        
+        return render_template('teacher_students.html', 
+                             all_students=all_students,
+                             student_summary=student_summary,
+                             courses=courses,
+                             total_unique_students=len(unique_matricules))
+
     @app.route('/teacher/export_attendance/<session_id>/<format>')
     @login_required
     @teacher_password_required
@@ -1000,6 +1069,307 @@ def create_app():
                 </div>
                 
                 <a href="/" class="btn">🚀 Go to Login</a>
+            </div>
+        </body>
+        </html>
+        """
+
+    @app.route('/admin/regenerate_qr_codes')
+    @login_required
+    def regenerate_qr_codes():
+        """Regenerate all QR codes with the current server IP"""
+        if not isinstance(current_user, Admin):
+            flash('Access denied', 'error')
+            return redirect(url_for('login'))
+        
+        try:
+            # Regenerate registration QR codes for all courses
+            courses = Course.query.all()
+            courses_updated = 0
+            
+            for course in courses:
+                if course.registration_qr_code:
+                    # Generate new registration QR code
+                    registration_url = get_external_url('student_registration', course_id=course.id)
+                    qr_filename = f'registration_{course.id}.png'
+                    generate_qr_code(registration_url, qr_filename)
+                    
+                    course.registration_qr_code = qr_filename
+                    courses_updated += 1
+            
+            # Regenerate attendance QR codes for all active sessions
+            sessions = AttendanceSession.query.filter_by(is_active=True).all()
+            sessions_updated = 0
+            
+            for session in sessions:
+                if session.qr_code_path:
+                    # Generate new attendance QR code
+                    attendance_url = get_external_url('take_attendance', session_id=session.id)
+                    qr_filename = f'attendance_{session.id}.png'
+                    generate_qr_code(attendance_url, qr_filename)
+                    
+                    session.qr_code_path = qr_filename
+                    sessions_updated += 1
+            
+            db.session.commit()
+            
+            flash(f'Successfully regenerated QR codes for {courses_updated} courses and {sessions_updated} active attendance sessions')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error regenerating QR codes: {str(e)}', 'error')
+        
+        return redirect(url_for('admin_dashboard'))
+
+    @app.route('/mobile-qr-test')
+    def mobile_qr_test():
+        """Generate test QR codes for mobile testing"""
+        # Generate a test QR code for mobile scanning
+        test_url = get_external_url('mobile_test')
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_L,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(test_url)
+        qr.make(fit=True)
+        
+        # Save the QR code
+        import io
+        import base64
+        img = qr.make_image(fill_color="black", back_color="white")
+        img_buffer = io.BytesIO()
+        img.save(img_buffer, format='PNG')
+        img_str = base64.b64encode(img_buffer.getvalue()).decode()
+        
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>QR Test - Mobile Scanner</title>
+            <style>
+                body {{ 
+                    font-family: Arial, sans-serif; 
+                    padding: 20px; 
+                    text-align: center; 
+                    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+                    color: white;
+                    min-height: 100vh;
+                    margin: 0;
+                }}
+                .container {{
+                    max-width: 500px;
+                    margin: 0 auto;
+                    background: white;
+                    color: #333;
+                    padding: 30px;
+                    border-radius: 15px;
+                    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+                }}
+                .qr-code {{
+                    background: white;
+                    padding: 20px;
+                    border-radius: 10px;
+                    margin: 20px 0;
+                    display: inline-block;
+                    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                }}
+                .instructions {{
+                    background: #f8f9fa;
+                    padding: 20px;
+                    border-radius: 10px;
+                    margin: 20px 0;
+                    text-align: left;
+                    border-left: 4px solid #28a745;
+                }}
+                .btn {{
+                    background: #28a745;
+                    color: white;
+                    padding: 15px 30px;
+                    border: none;
+                    border-radius: 25px;
+                    text-decoration: none;
+                    display: inline-block;
+                    margin: 10px;
+                    font-size: 16px;
+                    transition: all 0.3s;
+                }}
+                .btn:hover {{
+                    background: #1e7e34;
+                    transform: translateY(-2px);
+                }}
+                h1 {{ margin-top: 0; color: #28a745; }}
+                @media (max-width: 480px) {{
+                    body {{ padding: 10px; }}
+                    .container {{ padding: 20px; }}
+                    .qr-code img {{ max-width: 100%; height: auto; }}
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>📱 QR Code Mobile Test</h1>
+                <p><strong>Test QR Code for Mobile Scanning</strong></p>
+                
+                <div class="qr-code">
+                    <img src="data:image/png;base64,{img_str}" alt="Test QR Code" style="max-width: 300px;">
+                </div>
+                
+                <div class="instructions">
+                    <h3>📋 How to Test:</h3>
+                    <ol>
+                        <li><strong>Open QR Scanner:</strong> Use your phone's camera or QR scanner app</li>
+                        <li><strong>Scan QR Code:</strong> Point your camera at the QR code above</li>
+                        <li><strong>Tap the Link:</strong> Your phone should open the mobile test page</li>
+                        <li><strong>Verify Access:</strong> You should see a success message</li>
+                    </ol>
+                </div>
+                
+                <div class="instructions">
+                    <h3>✅ What This Tests:</h3>
+                    <ul>
+                        <li>QR code generation with correct network IP</li>
+                        <li>Mobile device network connectivity</li>
+                        <li>Mobile browser compatibility</li>
+                        <li>Touch interface responsiveness</li>
+                    </ul>
+                </div>
+                
+                <p><strong>Target URL:</strong><br>
+                <code>{test_url}</code></p>
+                
+                <a href="/" class="btn">🏠 Back to Login</a>
+                <a href="/mobile-test" class="btn">📱 Direct Mobile Test</a>
+            </div>
+        </body>
+                 </html>
+         """
+
+    @app.route('/verify-qr-codes')
+    def verify_qr_codes():
+        """Debug route to verify all QR codes are using correct URLs"""
+        courses = Course.query.all()
+        sessions = AttendanceSession.query.all()
+        
+        course_qr_info = []
+        for course in courses:
+            registration_url = get_external_url('student_registration', course_id=course.id)
+            course_qr_info.append({
+                'course_name': course.course_name,
+                'course_id': course.id,
+                'registration_url': registration_url,
+                'qr_file': course.registration_qr_code
+            })
+        
+        session_qr_info = []
+        for session in sessions:
+            attendance_url = get_external_url('take_attendance', session_id=session.id)
+            session_qr_info.append({
+                'session_name': session.session_name,
+                'session_id': session.id,
+                'attendance_url': attendance_url,
+                'qr_file': session.qr_code_path,
+                'is_active': session.is_active
+            })
+        
+        from datetime import datetime
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>QR Code Verification</title>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; }}
+                .container {{ max-width: 1200px; margin: 0 auto; }}
+                .status {{ padding: 15px; border-radius: 5px; margin: 20px 0; }}
+                .success {{ background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }}
+                .info {{ background: #cce7ff; color: #004085; border: 1px solid #b3d7ff; }}
+                table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+                th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }}
+                th {{ background-color: #f8f9fa; font-weight: bold; }}
+                .url {{ font-family: monospace; font-size: 12px; color: #007bff; }}
+                .btn {{ background: #007bff; color: white; padding: 8px 16px; text-decoration: none; border-radius: 4px; margin: 2px; }}
+                .btn:hover {{ background: #0056b3; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🔍 QR Code Verification Dashboard</h1>
+                
+                <div class="status success">
+                    <strong>✅ Server Configuration</strong><br>
+                    Platform: Render Cloud<br>
+                    External URL: <code>{config.RENDER_EXTERNAL_URL or 'Auto-detected from request'}</code><br>
+                    Service: <code>QR Attendance System</code>
+                </div>
+                
+                <h2>📚 Course Registration QR Codes</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Course Name</th>
+                            <th>Course ID</th>
+                            <th>Registration URL</th>
+                            <th>QR File</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join([f'''
+                        <tr>
+                            <td><strong>{course['course_name']}</strong></td>
+                            <td><code>{str(course['course_id'])[:8]}...</code></td>
+                            <td class="url">{course['registration_url']}</td>
+                            <td>{course['qr_file'] or 'No QR code'}</td>
+                            <td>
+                                <a href="{course['registration_url']}" class="btn" target="_blank">Test URL</a>
+                            </td>
+                        </tr>
+                        ''' for course in course_qr_info])}
+                    </tbody>
+                </table>
+                
+                <h2>📅 Attendance Session QR Codes</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Session Name</th>
+                            <th>Session ID</th>
+                            <th>Attendance URL</th>
+                            <th>QR File</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join([f'''
+                        <tr>
+                            <td><strong>{session['session_name']}</strong></td>
+                            <td><code>{str(session['session_id'])[:8]}...</code></td>
+                            <td class="url">{session['attendance_url']}</td>
+                            <td>{session['qr_file'] or 'No QR code'}</td>
+                            <td>{'🟢 Active' if session['is_active'] else '🔴 Inactive'}</td>
+                            <td>
+                                <a href="{session['attendance_url']}" class="btn" target="_blank">Test URL</a>
+                            </td>
+                        </tr>
+                        ''' for session in session_qr_info])}
+                    </tbody>
+                </table>
+                
+                <div class="status info">
+                    <strong>📱 Mobile Test Links:</strong><br>
+                    <a href="/mobile-test" class="btn">Mobile Test</a>
+                    <a href="/mobile-qr-test" class="btn">QR Test</a>
+                    <a href="/" class="btn">Back to System</a>
+                </div>
+                
+                <p><small>Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</small></p>
             </div>
         </body>
         </html>
