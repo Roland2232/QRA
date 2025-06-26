@@ -93,15 +93,27 @@ def create_app():
         return ''.join(secrets.choice(characters) for _ in range(length))
 
     def send_email(to, subject, template, **kwargs):
-        if not app.config['MAIL_USERNAME'] or not app.config['MAIL_PASSWORD']:
+        # Use environment variables or fallback to working credentials from app.py
+        mail_username = app.config['MAIL_USERNAME'] or 'notorios2003@gmail.com'
+        mail_password = app.config['MAIL_PASSWORD'] or 'thsl usar tiol uvxi'
+        mail_sender = app.config['MAIL_DEFAULT_SENDER'] or 'notorios2003@gmail.com'
+        
+        if not mail_username or not mail_password:
             print("❌ Email not configured - skipping email send")
             return False
+        
+        # Update mail config if using fallback credentials
+        if not app.config['MAIL_USERNAME']:
+            app.config['MAIL_USERNAME'] = mail_username
+            app.config['MAIL_PASSWORD'] = mail_password
+            app.config['MAIL_DEFAULT_SENDER'] = mail_sender
+            print(f"📧 Using fallback email configuration: {mail_username}")
             
         msg = Message(
             subject=subject,
             recipients=[to],
             html=template,
-            sender=app.config['MAIL_DEFAULT_SENDER']
+            sender=mail_sender
         )
         try:
             mail.send(msg)
@@ -247,6 +259,30 @@ def create_app():
                     flash('Invalid username or password', 'error')
         
         return render_template('login.html')
+
+    @app.route('/admin_login', methods=['POST'])
+    def admin_login():
+        return redirect(url_for('login'))
+
+    @app.route('/teacher_login', methods=['POST'])
+    def teacher_login():
+        username = request.form['username']
+        password = request.form['password']
+        
+        teacher = Teacher.query.filter_by(username=username).first()
+        
+        if teacher and check_password_hash(teacher.password_hash, password):
+            login_user(teacher)
+            
+            # Check if teacher must change password
+            if teacher.must_change_password:
+                flash('You must change your password before continuing', 'warning')
+                return redirect(url_for('change_password'))
+            
+            return redirect(url_for('teacher_dashboard'))
+        else:
+            flash('Invalid credentials', 'error')
+            return redirect(url_for('login'))
 
     @app.route('/logout')
     @login_required
