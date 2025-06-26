@@ -14,7 +14,7 @@ class RenderConfig:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'render-production-secret-key-change-this')
     DEBUG = False
     
-    # Database Configuration - PostgreSQL focused
+    # Database Configuration - PostgreSQL with SQLite fallback
     DATABASE_URL = os.environ.get('DATABASE_URL')
     
     # Handle different PostgreSQL URL formats and convert to psycopg3
@@ -24,29 +24,47 @@ class RenderConfig:
             DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql+psycopg://', 1)
         elif DATABASE_URL.startswith('postgresql://'):
             DATABASE_URL = DATABASE_URL.replace('postgresql://', 'postgresql+psycopg://', 1)
+        SQLALCHEMY_DATABASE_URI = DATABASE_URL
     else:
-        # Fallback construction if DATABASE_URL not provided
+        # Fallback to SQLite for development/testing when PostgreSQL not available
+        print("⚠️  No DATABASE_URL found - using SQLite fallback")
+        SQLALCHEMY_DATABASE_URI = 'sqlite:///qra_attendance.db'
+        # Try PostgreSQL construction as secondary option
         DB_HOST = os.environ.get('DB_HOST', 'localhost')
         DB_USER = os.environ.get('DB_USER', 'postgres')
         DB_PASSWORD = os.environ.get('DB_PASSWORD', '')
         DB_NAME = os.environ.get('DB_NAME', 'qra_attendance')
         DB_PORT = int(os.environ.get('DB_PORT', '5432'))
         
-        if DB_PASSWORD:
-            password = quote_plus(DB_PASSWORD)
-            DATABASE_URL = f'postgresql+psycopg://{DB_USER}:{password}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
-        else:
-            DATABASE_URL = f'postgresql+psycopg://{DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
-    
-    SQLALCHEMY_DATABASE_URI = DATABASE_URL
+        if DB_HOST != 'localhost' or DB_PASSWORD:  # Only try PostgreSQL if non-default values
+            try:
+                if DB_PASSWORD:
+                    password = quote_plus(DB_PASSWORD)
+                    alt_url = f'postgresql+psycopg://{DB_USER}:{password}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+                else:
+                    alt_url = f'postgresql+psycopg://{DB_USER}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+                print(f"🔄 Alternative PostgreSQL URL available: {alt_url[:50]}...")
+            except Exception:
+                pass
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_pre_ping': True,
-        'pool_recycle': 300,
-        'connect_args': {
-            'sslmode': 'require'  # Required for Render PostgreSQL
+    
+    # Configure engine options based on database type
+    if SQLALCHEMY_DATABASE_URI.startswith('postgresql'):
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'pool_pre_ping': True,
+            'pool_recycle': 300,
+            'connect_args': {
+                'sslmode': 'require'  # Required for Render PostgreSQL
+            }
         }
-    }
+    else:
+        # SQLite configuration
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'pool_pre_ping': True,
+            'connect_args': {
+                'check_same_thread': False  # Allow SQLite to be used across threads
+            }
+        }
     
     # Email Configuration - Gmail SMTP
     MAIL_SERVER = 'smtp.gmail.com'

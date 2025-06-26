@@ -175,28 +175,50 @@ def create_app():
                 
                 secret_code = form_data.get('secret_code')
                 if secret_code == app.config['ADMIN_SECRET_CODE']:
-                    # Create or get admin user
-                    admin = Admin.query.filter_by(username='admin').first()
-                    if not admin:
-                        admin = Admin(
-                            id='admin001',
-                            username='admin',
-                            email='admin@system.local',
-                            password_hash=generate_password_hash('admin123')
-                        )
-                        db.session.add(admin)
-                        try:
+                    # Ensure database tables exist first
+                    try:
+                        if hasattr(app, 'ensure_database_tables'):
+                            app.ensure_database_tables()
+                        
+                        # Create or get admin user
+                        admin = Admin.query.filter_by(username='admin').first()
+                        if not admin:
+                            admin = Admin(
+                                id='admin001',
+                                username='admin',
+                                email='admin@system.local',
+                                password_hash=generate_password_hash('admin123')
+                            )
+                            db.session.add(admin)
                             db.session.commit()
                             print("✅ Admin user created successfully")
-                        except Exception as e:
-                            print(f"❌ Error creating admin user: {e}")
-                            db.session.rollback()
-                            flash('Database error - please try again', 'error')
+                        
+                        login_user(admin)
+                        flash('Admin access granted', 'success')
+                        return redirect(url_for('admin_dashboard'))
+                        
+                    except Exception as e:
+                        print(f"❌ Database error during admin login: {e}")
+                        db.session.rollback()
+                        
+                        # If database fails, try to recreate tables and retry once
+                        try:
+                            db.create_all()
+                            admin = Admin(
+                                id='admin001',
+                                username='admin',
+                                email='admin@system.local',
+                                password_hash=generate_password_hash('admin123')
+                            )
+                            db.session.add(admin)
+                            db.session.commit()
+                            login_user(admin)
+                            flash('Admin access granted (database initialized)', 'success')
+                            return redirect(url_for('admin_dashboard'))
+                        except Exception as e2:
+                            print(f"❌ Failed to initialize database: {e2}")
+                            flash('Database connection error. Please check environment variables.', 'error')
                             return render_template('login.html')
-                    
-                    login_user(admin)
-                    flash('Admin access granted', 'success')
-                    return redirect(url_for('admin_dashboard'))
                 else:
                     flash('Invalid admin secret code', 'error')
             
@@ -1082,6 +1104,17 @@ def create_app():
         )
 
     # Create database tables with error handling
+    def ensure_database_tables():
+        """Ensure database tables exist, create if needed"""
+        try:
+            with app.app_context():
+                db.create_all()
+                return True
+        except Exception as e:
+            print(f"Database not ready: {e}")
+            return False
+
+    # Try to create tables now, but don't fail if it doesn't work
     with app.app_context():
         try:
             print("🔧 Creating database tables...")
@@ -1090,6 +1123,9 @@ def create_app():
         except Exception as e:
             print(f"❌ Error creating database tables: {e}")
             print("This might be normal on first deployment - tables will be created on first request")
+    
+    # Store the function in app for later use
+    app.ensure_database_tables = ensure_database_tables
 
     return app
 
