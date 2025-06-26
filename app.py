@@ -94,6 +94,7 @@ login_manager.login_view = 'login'
 mail = Mail(app)
 
 # Ensure upload directory exists
+
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 os.makedirs('static/qr_codes', exist_ok=True)
 
@@ -114,6 +115,7 @@ def load_user(user_id):
         return user
     return Teacher.query.get(user_id)
 
+# Utility Functions
 # Utility Functions
 def generate_password(length=12):
     characters = string.ascii_letters + string.digits + "!@#$%^&*"
