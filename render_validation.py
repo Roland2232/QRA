@@ -57,16 +57,17 @@ class FormValidator:
         if len(name) > 100:
             return False, "Teacher name must not exceed 100 characters"
         
-        # Only allow letters, spaces, hyphens, apostrophes, and dots (no numbers)
-        if not re.match(r"^[a-zA-Z\s\-'.]+$", name):
-            return False, "Teacher name can only contain letters, spaces, hyphens, apostrophes, and dots (no numbers allowed)"
+        # Only allow letters (including diacritics), spaces, hyphens, apostrophes, and dots (no numbers)
+        # Support French and German characters: àáâäæçèéêëìíîïñòóôöœùúûü etc.
+        if not re.match(r"^[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿß\s\-'.]+$", name):
+            return False, "Teacher name can only contain letters (including accented letters), spaces, hyphens, apostrophes, and dots (no numbers allowed)"
         
         # Check for consecutive spaces or special characters
         if re.search(r'\s{2,}', name) or re.search(r'[-\'.]{2,}', name):
             return False, "Teacher name cannot contain consecutive spaces or special characters"
         
-        # Must start and end with a letter
-        if len(name) > 1 and not re.match(r'^[a-zA-Z].*[a-zA-Z]$', name):
+        # Must start and end with a letter (including accented letters)
+        if len(name) > 1 and not re.match(r'^[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿß].*[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿß]$', name):
             return False, "Teacher name must start and end with a letter"
         
         return True, "Valid teacher name"
@@ -213,6 +214,74 @@ class FormValidator:
         return True, "Valid admin code format"
     
     @staticmethod
+    def validate_full_name(full_name):
+        """Validate full name for admin account creation: letters, hyphens, and French/German diacritics only"""
+        if not full_name:
+            return False, "Full name is required"
+        
+        full_name = full_name.strip()
+        
+        if len(full_name) < 2:
+            return False, "Full name must be at least 2 characters long"
+        
+        if len(full_name) > 100:
+            return False, "Full name must not exceed 100 characters"
+        
+        # Only allow letters (including French/German diacritics), spaces, and hyphens
+        # French: àáâäæçèéêëìíîïñòóôöœùúûüÿ
+        # German: äöüß
+        if not re.match(r"^[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿßäöüÄÖÜ\s\-]+$", full_name):
+            return False, "Full name can only contain letters (including French and German accented letters), spaces, and hyphens"
+        
+        # Check for consecutive spaces or hyphens
+        if re.search(r'\s{2,}', full_name) or re.search(r'-{2,}', full_name):
+            return False, "Full name cannot contain consecutive spaces or hyphens"
+        
+        # Must start and end with a letter (including accented letters)
+        if len(full_name) > 1 and not re.match(r'^[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿßäöüÄÖÜ].*[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿßäöüÄÖÜ]$', full_name):
+            return False, "Full name must start and end with a letter"
+        
+        # Ensure it contains at least one space (for first and last name)
+        if ' ' not in full_name:
+            return False, "Full name must contain at least first and last name separated by space"
+        
+        return True, "Valid full name"
+    
+    @staticmethod
+    def validate_reset_code(code):
+        """Validate password reset code: 6-digit numeric code"""
+        if not code:
+            return False, "Reset code is required"
+        
+        code = code.strip()
+        
+        # Must be exactly 6 digits
+        if not re.match(r'^\d{6}$', code):
+            return False, "Reset code must be exactly 6 digits"
+        
+        return True, "Valid reset code"
+    
+    @staticmethod
+    def validate_name(name):
+        """Generic name validation for course names, etc."""
+        if not name:
+            return False, "Name is required"
+        
+        name = name.strip()
+        
+        if len(name) < 2:
+            return False, "Name must be at least 2 characters long"
+        
+        if len(name) > 100:
+            return False, "Name must not exceed 100 characters"
+        
+        # Allow letters, numbers, spaces, and common punctuation
+        if not re.match(r'^[a-zA-Z0-9\s\-_.,()]+$', name):
+            return False, "Name contains invalid characters"
+        
+        return True, "Valid name"
+    
+    @staticmethod
     def sanitize_input(text):
         """Comprehensive input sanitization to prevent XSS and injection attacks"""
         if not text:
@@ -268,17 +337,17 @@ class FormValidator:
 
 def validate_form_data(form_data, form_type):
     """
-    Comprehensive form validation based on form type
+    Comprehensive form validation dispatcher
     
     Args:
         form_data (dict): Form data to validate
-        form_type (str): Type of form ('teacher_creation', 'student_registration', 'login', etc.)
+        form_type (str): Type of form validation to perform
         
     Returns:
         tuple: (is_valid, errors_dict)
     """
-    validator = FormValidator()
     errors = {}
+    validator = FormValidator()
     
     if form_type == 'teacher_creation' or form_type == 'create_teacher':
         # Validate teacher creation form
@@ -288,7 +357,7 @@ def validate_form_data(form_data, form_type):
                 errors['username'] = message
         
         if 'full_name' in form_data:
-            is_valid, message = validator.validate_teacher_name(form_data['full_name'])
+            is_valid, message = validator.validate_full_name(form_data['full_name'])
             if not is_valid:
                 errors['full_name'] = message
         
@@ -296,6 +365,26 @@ def validate_form_data(form_data, form_type):
             is_valid, message = validator.validate_email(form_data['email'])
             if not is_valid:
                 errors['email'] = message
+    
+    elif form_type == 'teacher_login':
+        # Validate teacher login form
+        if 'username' in form_data:
+            username = form_data['username'].strip()
+            if not username:
+                errors['username'] = "Username is required"
+            elif len(username) < 3:
+                errors['username'] = "Username must be at least 3 characters long"
+        
+        if 'password' in form_data:
+            if not form_data['password']:
+                errors['password'] = "Password is required"
+    
+    elif form_type == 'admin_login':
+        # Validate admin login form
+        if 'secret_code' in form_data:
+            is_valid, message = validator.validate_admin_code(form_data['secret_code'])
+            if not is_valid:
+                errors['secret_code'] = message
     
     elif form_type == 'student_registration':
         # Validate student registration form
@@ -314,11 +403,11 @@ def validate_form_data(form_data, form_type):
                 errors['sex'] = "Sex must be either 'Male' or 'Female'"
     
     elif form_type == 'login':
-        # Validate login form
+        # Generic login validation
         if 'username' in form_data:
-            is_valid, message = validator.validate_username(form_data['username'])
-            if not is_valid:
-                errors['username'] = message
+            username = form_data['username'].strip()
+            if not username:
+                errors['username'] = "Username is required"
         
         if 'password' in form_data:
             if not form_data['password']:
@@ -329,8 +418,12 @@ def validate_form_data(form_data, form_type):
             if not is_valid:
                 errors['admin_code'] = message
     
-    elif form_type == 'password_change':
+    elif form_type == 'change_password':
         # Validate password change form
+        if 'current_password' in form_data:
+            if not form_data['current_password']:
+                errors['current_password'] = "Current password is required"
+        
         if 'new_password' in form_data:
             is_valid, message = validator.validate_password(form_data['new_password'])
             if not is_valid:
@@ -340,36 +433,42 @@ def validate_form_data(form_data, form_type):
             if form_data['new_password'] != form_data['confirm_password']:
                 errors['confirm_password'] = "Password confirmation does not match"
     
-    elif form_type == 'attendance_session':
-        # Validate attendance session creation
-        if 'session_name' in form_data:
-            if not form_data['session_name'].strip():
-                errors['session_name'] = "Session name is required"
-            elif len(form_data['session_name'].strip()) < 3:
-                errors['session_name'] = "Session name must be at least 3 characters long"
-        
-        if 'latitude' in form_data and 'longitude' in form_data:
-            is_valid, message = validator.validate_location(
-                form_data['latitude'], 
-                form_data['longitude']
-            )
+    elif form_type == 'forgot_password':
+        # Validate forgot password form
+        if 'email' in form_data:
+            is_valid, message = validator.validate_email(form_data['email'])
             if not is_valid:
-                errors['location'] = message
+                errors['email'] = message
+    
+    elif form_type == 'reset_password':
+        # Validate reset password form
+        if 'reset_code' in form_data:
+            is_valid, message = validator.validate_reset_code(form_data['reset_code'])
+            if not is_valid:
+                errors['reset_code'] = message
+        
+        if 'new_password' in form_data:
+            is_valid, message = validator.validate_password(form_data['new_password'])
+            if not is_valid:
+                errors['new_password'] = message
+        
+        if 'confirm_password' in form_data and 'new_password' in form_data:
+            if form_data['new_password'] != form_data['confirm_password']:
+                errors['confirm_password'] = "Passwords do not match"
     
     elif form_type == 'course_creation':
         # Validate course creation form
         if 'name' in form_data:
-            if not form_data['name'].strip():
-                errors['name'] = "Course name is required"
-            elif len(form_data['name'].strip()) < 3:
-                errors['name'] = "Course name must be at least 3 characters long"
+            is_valid, message = validator.validate_name(form_data['name'])
+            if not is_valid:
+                errors['name'] = message
         
         if 'code' in form_data:
             code = form_data['code'].strip().upper()
             if not code:
                 errors['code'] = "Course code is required"
-            elif not re.match(r'^[A-Z0-9]{3,10}$', code):
-                errors['code'] = "Course code must be 3-10 characters, letters and numbers only"
+            elif not re.match(r'^[A-Z0-9\-]{3,20}$', code):
+                errors['code'] = "Course code must be 3-20 characters, letters, numbers, and hyphens only"
     
     return len(errors) == 0, errors
 
@@ -420,9 +519,9 @@ def validate_teacher_creation_form(form_data):
     else:
         errors['username'] = "Username is required"
     
-    # Validate teacher name
+    # Validate full name (for admin account creation with French/German diacritics support)
     if 'full_name' in sanitized_data:
-        is_valid, message = validator.validate_teacher_name(sanitized_data['full_name'])
+        is_valid, message = validator.validate_full_name(sanitized_data['full_name'])
         if not is_valid:
             errors['full_name'] = message
     else:
@@ -491,16 +590,142 @@ def verify_email_deliverability(email):
     Returns:
         tuple: (is_valid, message)
     """
-    validator = FormValidator()
-    
-    # First check basic format
-    is_valid, message = validator.validate_email(email)
-    if not is_valid:
-        return False, message
-    
-    # Then check domain deliverability
     try:
-        return validator.validate_email_domain(email)
-    except:
-        # If MX check fails, just return true for basic format validation
-        return True, "Email format valid (domain check skipped)" 
+        # Basic format validation first
+        validator = FormValidator()
+        is_valid, message = validator.validate_email(email)
+        if not is_valid:
+            return False, message
+        
+        # Extract domain
+        domain = email.split('@')[1]
+        
+        # Check MX record
+        try:
+            mx_records = dns.resolver.resolve(domain, 'MX')
+            if len(mx_records) > 0:
+                return True, "Email domain verified"
+            else:
+                return False, "Email domain has no MX record"
+        except dns.resolver.NXDOMAIN:
+            return False, "Email domain does not exist"
+        except dns.resolver.NoAnswer:
+            return False, "Email domain has no MX record"
+        except Exception as dns_error:
+            print(f"DNS check failed: {dns_error}")
+            # Don't fail validation if DNS check fails
+            return True, "Email format valid (DNS check skipped)"
+            
+    except Exception as e:
+        print(f"Email validation error: {e}")
+        return False, "Email validation failed"
+
+def validate_forgot_password_form(form_data):
+    """
+    Validate forgot password form
+    
+    Args:
+        form_data (dict): Form data containing email
+        
+    Returns:
+        tuple: (is_valid, errors_dict, sanitized_data)
+    """
+    validator = FormValidator()
+    errors = {}
+    
+    # Sanitize inputs
+    sanitized_data = {}
+    for key, value in form_data.items():
+        sanitized_data[key] = validator.sanitize_input(value)
+    
+    # Validate email
+    if 'email' in sanitized_data:
+        is_valid, message = validator.validate_email(sanitized_data['email'])
+        if not is_valid:
+            errors['email'] = message
+    else:
+        errors['email'] = "Email is required"
+    
+    return len(errors) == 0, errors, sanitized_data
+
+def validate_reset_password_form(form_data):
+    """
+    Validate reset password form with code and new password
+    
+    Args:
+        form_data (dict): Form data containing reset_code, new_password, confirm_password
+        
+    Returns:
+        tuple: (is_valid, errors_dict, sanitized_data)
+    """
+    validator = FormValidator()
+    errors = {}
+    
+    # Sanitize inputs (except passwords)
+    sanitized_data = {}
+    for key, value in form_data.items():
+        if key in ['new_password', 'confirm_password']:
+            sanitized_data[key] = value  # Don't sanitize passwords
+        else:
+            sanitized_data[key] = validator.sanitize_input(value)
+    
+    # Validate reset code
+    if 'reset_code' in sanitized_data:
+        is_valid, message = validator.validate_reset_code(sanitized_data['reset_code'])
+        if not is_valid:
+            errors['reset_code'] = message
+    else:
+        errors['reset_code'] = "Reset code is required"
+    
+    # Validate new password
+    if 'new_password' in sanitized_data:
+        is_valid, message = validator.validate_password(sanitized_data['new_password'])
+        if not is_valid:
+            errors['new_password'] = message
+    else:
+        errors['new_password'] = "New password is required"
+    
+    # Validate password confirmation
+    if 'confirm_password' in sanitized_data:
+        if sanitized_data.get('new_password') != sanitized_data['confirm_password']:
+            errors['confirm_password'] = "Passwords do not match"
+    else:
+        errors['confirm_password'] = "Password confirmation is required"
+    
+    return len(errors) == 0, errors, sanitized_data
+
+def validate_login_form(form_data):
+    """
+    Comprehensive validation for login forms
+    
+    Args:
+        form_data (dict): Form data to validate
+        
+    Returns:
+        tuple: (is_valid, errors_dict, sanitized_data)
+    """
+    validator = FormValidator()
+    errors = {}
+    
+    # Sanitize all inputs first
+    sanitized_data = {}
+    for key, value in form_data.items():
+        sanitized_data[key] = validator.sanitize_input(value)
+    
+    # Validate username
+    if 'username' in sanitized_data:
+        username = sanitized_data['username']
+        if not username:
+            errors['username'] = "Username is required"
+        elif len(username) < 3:
+            errors['username'] = "Username must be at least 3 characters long"
+    
+    # Validate password
+    if 'password' in sanitized_data:
+        password = form_data['password']  # Don't sanitize password, just validate
+        if not password:
+            errors['password'] = "Password is required"
+        elif len(password) < 3:
+            errors['password'] = "Password must be at least 3 characters long"
+    
+    return len(errors) == 0, errors, sanitized_data 

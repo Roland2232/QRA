@@ -3,6 +3,7 @@ from flask_login import UserMixin
 from datetime import datetime
 import secrets
 import uuid
+import random
 
 db = SQLAlchemy()
 
@@ -30,6 +31,29 @@ class Teacher(UserMixin, db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     courses = db.relationship('Course', backref='teacher', lazy=True, cascade='all, delete-orphan')
+
+class PasswordReset(db.Model):
+    __tablename__ = 'password_reset'
+    id = db.Column(db.String(50), primary_key=True, default=lambda: secrets.token_hex(16))
+    teacher_id = db.Column(db.String(36), db.ForeignKey('teacher.id'), nullable=False)
+    reset_code = db.Column(db.String(6), nullable=False)
+    email = db.Column(db.String(120), nullable=False)
+    is_used = db.Column(db.Boolean, default=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    teacher = db.relationship('Teacher', backref='password_resets')
+    
+    def is_expired(self):
+        return datetime.utcnow() > self.expires_at
+    
+    def is_valid(self):
+        return not self.is_used and not self.is_expired()
+    
+    @staticmethod
+    def generate_reset_code():
+        """Generate a 6-digit reset code"""
+        return str(random.randint(100000, 999999))
 
 class Course(db.Model):
     __tablename__ = 'course'

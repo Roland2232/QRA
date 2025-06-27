@@ -29,19 +29,54 @@ class FormValidator:
         if len(name) > 100:
             return False, "Teacher name must not exceed 100 characters"
         
-        # Only allow letters, spaces, hyphens, apostrophes, and dots (no numbers)
-        if not re.match(r"^[a-zA-Z\s\-'.]+$", name):
-            return False, "Teacher name can only contain letters, spaces, hyphens, apostrophes, and dots (no numbers allowed)"
+        # Only allow letters (including diacritics), spaces, hyphens, apostrophes, and dots (no numbers)
+        # Support French and German characters: àáâäæçèéêëìíîïñòóôöœùúûü etc.
+        if not re.match(r"^[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿß\s\-'.]+$", name):
+            return False, "Teacher name can only contain letters (including accented letters), spaces, hyphens, apostrophes, and dots (no numbers allowed)"
         
         # Check for consecutive spaces or special characters
         if re.search(r'\s{2,}', name) or re.search(r'[-\'.]{2,}', name):
             return False, "Teacher name cannot contain consecutive spaces or special characters"
         
-        # Must start and end with a letter
-        if len(name) > 1 and not re.match(r'^[a-zA-Z].*[a-zA-Z]$', name):
+        # Must start and end with a letter (including accented letters)
+        if len(name) > 1 and not re.match(r'^[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿß].*[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿß]$', name):
             return False, "Teacher name must start and end with a letter"
         
         return True, "Valid teacher name"
+    
+    @staticmethod
+    def validate_full_name(full_name):
+        """Validate full name for admin account creation: letters, hyphens, and French/German diacritics only"""
+        if not full_name:
+            return False, "Full name is required"
+        
+        full_name = full_name.strip()
+        
+        if len(full_name) < 2:
+            return False, "Full name must be at least 2 characters long"
+        
+        if len(full_name) > 100:
+            return False, "Full name must not exceed 100 characters"
+        
+        # Only allow letters (including French/German diacritics), spaces, and hyphens
+        # French: àáâäæçèéêëìíîïñòóôöœùúûüÿ
+        # German: äöüß
+        if not re.match(r"^[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿßäöüÄÖÜ\s\-]+$", full_name):
+            return False, "Full name can only contain letters (including French and German accented letters), spaces, and hyphens"
+        
+        # Check for consecutive spaces or hyphens
+        if re.search(r'\s{2,}', full_name) or re.search(r'-{2,}', full_name):
+            return False, "Full name cannot contain consecutive spaces or hyphens"
+        
+        # Must start and end with a letter (including accented letters)
+        if len(full_name) > 1 and not re.match(r'^[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿßäöüÄÖÜ].*[a-zA-ZàáâäæçèéêëìíîïñòóôöœùúûüÀÁÂÄÆÇÈÉÊËÌÍÎÏÑÒÓÔÖŒÙÚÛÜÿßäöüÄÖÜ]$', full_name):
+            return False, "Full name must start and end with a letter"
+        
+        # Ensure it contains at least one space (for first and last name)
+        if ' ' not in full_name:
+            return False, "Full name must contain at least first and last name separated by space"
+        
+        return True, "Valid full name"
     
     @staticmethod
     def validate_username(username):
@@ -204,6 +239,20 @@ class FormValidator:
         return True, "Valid admin code format"
     
     @staticmethod
+    def validate_reset_code(code):
+        """Validate password reset code: 6-digit numeric code"""
+        if not code:
+            return False, "Reset code is required"
+        
+        code = code.strip()
+        
+        # Must be exactly 6 digits
+        if not re.match(r'^\d{6}$', code):
+            return False, "Reset code must be exactly 6 digits"
+        
+        return True, "Valid reset code"
+    
+    @staticmethod
     def sanitize_input(text):
         """Comprehensive input sanitization to prevent XSS and injection attacks"""
         if not text:
@@ -355,9 +404,9 @@ def validate_teacher_creation_form(form_data):
     else:
         errors['username'] = "Username is required"
     
-    # Validate teacher name
+    # Validate full name (for admin account creation with French/German diacritics support)
     if 'full_name' in sanitized_data:
-        is_valid, message = validator.validate_teacher_name(sanitized_data['full_name'])
+        is_valid, message = validator.validate_full_name(sanitized_data['full_name'])
         if not is_valid:
             errors['full_name'] = message
     else:
@@ -479,124 +528,85 @@ def validate_form_data(form_data, form_type):
     Comprehensive form validation dispatcher
     Returns: (is_valid, errors_dict)
     """
-    errors = {}
+    if form_type == 'teacher_creation':
+        return validate_teacher_creation_form(form_data)[:2]
+    elif form_type == 'student_registration':
+        return validate_student_registration_form(form_data)[:2]
+    elif form_type == 'login':
+        return validate_login_form(form_data)[:2]
+    else:
+        return False, {"form": "Unknown form type"}
+
+def validate_forgot_password_form(form_data):
+    """
+    Validate forgot password form
+    
+    Args:
+        form_data (dict): Form data containing email
+        
+    Returns:
+        tuple: (is_valid, errors_dict, sanitized_data)
+    """
     validator = FormValidator()
+    errors = {}
     
-    if form_type == 'teacher_login':
-        # Validate username
-        username = form_data.get('username', '').strip()
-        is_valid, message = validator.validate_username(username)
-        if not is_valid:
-            errors['username'] = message
-        
-        # Validate password exists
-        password = form_data.get('password', '')
-        if not password:
-            errors['password'] = "Password is required"
+    # Sanitize inputs
+    sanitized_data = {}
+    for key, value in form_data.items():
+        sanitized_data[key] = validator.sanitize_input(value)
     
-    elif form_type == 'admin_login':
-        # Validate admin code
-        admin_code = form_data.get('admin_code', '').strip()
-        is_valid, message = validator.validate_admin_code(admin_code)
-        if not is_valid:
-            errors['admin_code'] = message
-    
-    elif form_type == 'create_teacher':
-        # Validate full name
-        full_name = form_data.get('full_name', '').strip()
-        is_valid, message = validator.validate_teacher_name(full_name)
-        if not is_valid:
-            errors['full_name'] = message
-        
-        # Validate username
-        username = form_data.get('username', '').strip()
-        is_valid, message = validator.validate_username(username)
-        if not is_valid:
-            errors['username'] = message
-        
-        # Validate email
-        email = form_data.get('email', '').strip()
-        is_valid, message = validator.validate_email(email)
+    # Validate email
+    if 'email' in sanitized_data:
+        is_valid, message = validator.validate_email(sanitized_data['email'])
         if not is_valid:
             errors['email'] = message
+    else:
+        errors['email'] = "Email is required"
     
-    elif form_type == 'student_registration':
-        # Validate name
-        name = form_data.get('name', '').strip()
-        is_valid, message = validator.validate_student_name(name)
-        if not is_valid:
-            errors['name'] = message
-        
-        # Validate matricule
-        matricule = form_data.get('matricule', '').strip()
-        is_valid, message = validator.validate_matricule(matricule)
-        if not is_valid:
-            errors['matricule'] = message
-        
-        # Validate sex
-        sex = form_data.get('sex', '').strip()
-        if sex not in ['Male', 'Female']:
-            errors['sex'] = "Please select a valid gender"
+    return len(errors) == 0, errors, sanitized_data
+
+def validate_reset_password_form(form_data):
+    """
+    Validate reset password form with code and new password
     
-    elif form_type == 'change_password':
-        # Validate current password exists
-        current_password = form_data.get('current_password', '')
-        if not current_password:
-            errors['current_password'] = "Current password is required"
+    Args:
+        form_data (dict): Form data containing reset_code, new_password, confirm_password
         
-        # Validate new password
-        new_password = form_data.get('new_password', '')
-        is_valid, message = validator.validate_password(new_password)
+    Returns:
+        tuple: (is_valid, errors_dict, sanitized_data)
+    """
+    validator = FormValidator()
+    errors = {}
+    
+    # Sanitize inputs (except passwords)
+    sanitized_data = {}
+    for key, value in form_data.items():
+        if key in ['new_password', 'confirm_password']:
+            sanitized_data[key] = value  # Don't sanitize passwords
+        else:
+            sanitized_data[key] = validator.sanitize_input(value)
+    
+    # Validate reset code
+    if 'reset_code' in sanitized_data:
+        is_valid, message = validator.validate_reset_code(sanitized_data['reset_code'])
+        if not is_valid:
+            errors['reset_code'] = message
+    else:
+        errors['reset_code'] = "Reset code is required"
+    
+    # Validate new password
+    if 'new_password' in sanitized_data:
+        is_valid, message = validator.validate_password(sanitized_data['new_password'])
         if not is_valid:
             errors['new_password'] = message
-        
-        # Validate password confirmation
-        confirm_password = form_data.get('confirm_password', '')
-        if new_password != confirm_password:
-            errors['confirm_password'] = "Password confirmation does not match"
+    else:
+        errors['new_password'] = "New password is required"
     
-    elif form_type == 'create_course':
-        # Validate course name
-        name = form_data.get('name', '').strip()
-        is_valid, message = validator.validate_name(name)
-        if not is_valid:
-            errors['name'] = message
-        
-        # Validate course code
-        code = form_data.get('code', '').strip()
-        is_valid, message = validator.validate_course_code(code)
-        if not is_valid:
-            errors['code'] = message
+    # Validate password confirmation
+    if 'confirm_password' in sanitized_data:
+        if sanitized_data.get('new_password') != sanitized_data['confirm_password']:
+            errors['confirm_password'] = "Passwords do not match"
+    else:
+        errors['confirm_password'] = "Password confirmation is required"
     
-    elif form_type == 'create_attendance_session':
-        # Validate session name
-        session_name = form_data.get('session_name', '').strip()
-        is_valid, message = validator.validate_session_name(session_name)
-        if not is_valid:
-            errors['session_name'] = message
-        
-        # Validate location if provided
-        latitude = form_data.get('latitude')
-        longitude = form_data.get('longitude')
-        if latitude and longitude:
-            is_valid, message = validator.validate_location(latitude, longitude)
-            if not is_valid:
-                errors['location'] = message
-    
-    elif form_type == 'take_attendance':
-        # Validate matricule selection
-        selected_matricule = form_data.get('selected_matricule', '').strip()
-        if not selected_matricule:
-            errors['selected_matricule'] = "Please select your matricule"
-        
-        # Validate location
-        latitude = form_data.get('latitude')
-        longitude = form_data.get('longitude')
-        if not latitude or not longitude:
-            errors['location'] = "Location is required for attendance verification"
-        else:
-            is_valid, message = validator.validate_location(latitude, longitude)
-            if not is_valid:
-                errors['location'] = message
-    
-    return len(errors) == 0, errors 
+    return len(errors) == 0, errors, sanitized_data 

@@ -26,6 +26,8 @@ from validation import (
     validate_teacher_creation_form, 
     validate_student_registration_form, 
     validate_login_form,
+    validate_forgot_password_form,
+    validate_reset_password_form,
     sanitize_all_inputs
 )
 

@@ -1,4 +1,3 @@
-
 -- Create database user and grant privileges
 CREATE USER IF NOT EXISTS 'remi'@'localhost' IDENTIFIED BY '1234';
 CREATE USER IF NOT EXISTS 'remi'@'%' IDENTIFIED BY '1234';
@@ -14,6 +13,7 @@ DROP TABLE IF EXISTS student;
 DROP TABLE IF EXISTS course;
 DROP TABLE IF EXISTS teacher;
 DROP TABLE IF EXISTS admin;
+DROP TABLE IF EXISTS password_reset;
 
 -- 1. Admin Table
 CREATE TABLE admin (
@@ -22,8 +22,8 @@ CREATE TABLE admin (
     email VARCHAR(120) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     is_admin BOOLEAN DEFAULT TRUE,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. Teacher Table
@@ -36,8 +36,8 @@ CREATE TABLE teacher (
     is_admin BOOLEAN DEFAULT FALSE,
     must_change_password BOOLEAN DEFAULT TRUE NOT NULL,
     created_by VARCHAR(50),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (created_by) REFERENCES admin(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -48,8 +48,8 @@ CREATE TABLE course (
     code VARCHAR(20) UNIQUE NOT NULL,
     teacher_id VARCHAR(50) NOT NULL,
     registration_qr_code TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (teacher_id) REFERENCES teacher(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -62,8 +62,8 @@ CREATE TABLE student (
     photo_path VARCHAR(255),
     face_encoding TEXT,
     course_id VARCHAR(50) NOT NULL,
-    registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (course_id) REFERENCES course(id) ON DELETE CASCADE,
     UNIQUE KEY unique_student_course (matricule, course_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -77,10 +77,10 @@ CREATE TABLE attendance_session (
     latitude DECIMAL(10,8),
     longitude DECIMAL(11,8),
     radius_meters INTEGER DEFAULT 100,
-    valid_until DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    expires_at DATETIME,
+    valid_until TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP,
     is_active BOOLEAN DEFAULT TRUE,
     qr_code_path VARCHAR(255),
     FOREIGN KEY (course_id) REFERENCES course(id) ON DELETE CASCADE
@@ -91,14 +91,26 @@ CREATE TABLE attendance (
     id VARCHAR(50) PRIMARY KEY,
     student_id VARCHAR(50) NOT NULL,
     session_id VARCHAR(50) NOT NULL,
-    marked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    marked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     latitude DECIMAL(10,8),
     longitude DECIMAL(11,8),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (student_id) REFERENCES student(id) ON DELETE CASCADE,
     FOREIGN KEY (session_id) REFERENCES attendance_session(id) ON DELETE CASCADE,
     UNIQUE KEY unique_student_session (student_id, session_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 7. Password Reset Table
+CREATE TABLE password_reset (
+    id VARCHAR(50) PRIMARY KEY,
+    teacher_id VARCHAR(36) NOT NULL,
+    reset_code VARCHAR(6) NOT NULL,
+    email VARCHAR(120) NOT NULL,
+    is_used BOOLEAN DEFAULT FALSE,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (teacher_id) REFERENCES teacher(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Create Indexes for better performance
@@ -121,10 +133,15 @@ CREATE INDEX idx_attendance_student_id ON attendance(student_id);
 CREATE INDEX idx_attendance_session_id ON attendance(session_id);
 CREATE INDEX idx_attendance_marked_at ON attendance(marked_at);
 
+CREATE INDEX idx_password_reset_code ON password_reset(reset_code);
+CREATE INDEX idx_password_reset_teacher ON password_reset(teacher_id);
+
 -- Insert default admin (optional - uncomment if needed)
 -- INSERT INTO admin (id, username, email, password_hash, is_admin) 
 -- VALUES ('admin001', 'admin', 'admin@school.edu', '$2b$12$hash_here', TRUE);
 
+-- Insert default admin user (password: admin123)
+INSERT IGNORE INTO admin (id, username, email, password_hash) 
 -- Sample data (uncomment if needed for testing)
 /*
 -- Sample Teacher

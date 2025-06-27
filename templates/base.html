@@ -503,70 +503,70 @@
         // Global mobile enhancements using SafeDOM
         SafeDOM.ready(function() {
             try {
-                // Add fade-in animation to main content
+            // Add fade-in animation to main content
                 SafeDOM.toggleClassSafe('main', 'fade-in');
-                
-                // Auto-close navbar on mobile after clicking a link
+            
+            // Auto-close navbar on mobile after clicking a link
                 const navLinks = SafeDOM.querySelectorAll('.navbar-nav .nav-link');
                 const navbarCollapse = SafeDOM.getElementById('navbarNav');
-                
+            
                 if (navLinks.length > 0 && navbarCollapse) {
-                    navLinks.forEach(link => {
+            navLinks.forEach(link => {
                         SafeDOM.addEventListenerSafe(link, 'click', function() {
                             if (window.innerWidth < 992 && typeof bootstrap !== 'undefined') {
                                 try {
-                                    bootstrap.Collapse.getInstance(navbarCollapse)?.hide();
+                        bootstrap.Collapse.getInstance(navbarCollapse)?.hide();
                                 } catch (e) {
                                     console.warn('Bootstrap Collapse instance not available:', e);
                                 }
-                            }
-                        });
-                    });
-                }
-                
-                // Prevent zoom on double-tap for iOS
-                let lastTouchEnd = 0;
-                document.addEventListener('touchend', function (event) {
-                    const now = (new Date()).getTime();
-                    if (now - lastTouchEnd <= 300) {
-                        event.preventDefault();
                     }
-                    lastTouchEnd = now;
-                }, false);
-                
-                // Add loading states to forms
-                const forms = SafeDOM.querySelectorAll('form');
-                forms.forEach(form => {
-                    SafeDOM.addEventListenerSafe(form, 'submit', function() {
-                        const submitBtn = form.querySelector('button[type="submit"]');
-                        if (submitBtn && !submitBtn.disabled) {
-                            submitBtn.classList.add('btn-loading');
-                        }
-                    });
                 });
-                
-                // Enhanced form validation visual feedback
+            });
+                }
+            
+            // Prevent zoom on double-tap for iOS
+            let lastTouchEnd = 0;
+            document.addEventListener('touchend', function (event) {
+                const now = (new Date()).getTime();
+                if (now - lastTouchEnd <= 300) {
+                    event.preventDefault();
+                }
+                lastTouchEnd = now;
+            }, false);
+            
+            // Add loading states to forms
+                const forms = SafeDOM.querySelectorAll('form');
+            forms.forEach(form => {
+                    SafeDOM.addEventListenerSafe(form, 'submit', function() {
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    if (submitBtn && !submitBtn.disabled) {
+                        submitBtn.classList.add('btn-loading');
+                    }
+                });
+            });
+            
+            // Enhanced form validation visual feedback
                 const inputs = SafeDOM.querySelectorAll('input[required], select[required]');
-                inputs.forEach(input => {
+            inputs.forEach(input => {
                     SafeDOM.addEventListenerSafe(input, 'invalid', function() {
-                        this.classList.add('is-invalid');
-                        // Haptic feedback if available
-                        if (navigator.vibrate) {
+                    this.classList.add('is-invalid');
+                    // Haptic feedback if available
+                    if (navigator.vibrate) {
                             try {
-                                navigator.vibrate(200);
+                        navigator.vibrate(200);
                             } catch (e) {
                                 console.warn('Vibration not supported:', e);
                             }
-                        }
-                    });
-                    
-                    SafeDOM.addEventListenerSafe(input, 'input', function() {
-                        if (this.validity.valid) {
-                            this.classList.remove('is-invalid');
-                            this.classList.add('is-valid');
-                        }
-                    });
+                    }
                 });
+                
+                    SafeDOM.addEventListenerSafe(input, 'input', function() {
+                    if (this.validity.valid) {
+                        this.classList.remove('is-invalid');
+                        this.classList.add('is-valid');
+                    }
+                });
+            });
             } catch (e) {
                 console.error('Error in global mobile enhancements:', e);
             }
@@ -576,8 +576,8 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', function() {
                 try {
-                    // Only register if we create a service worker file
-                    // navigator.serviceWorker.register('/sw.js');
+                // Only register if we create a service worker file
+                // navigator.serviceWorker.register('/sw.js');
                 } catch (e) {
                     console.warn('Service Worker registration failed:', e);
                 }

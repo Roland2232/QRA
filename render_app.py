@@ -32,7 +32,10 @@ from render_validation import (
     validate_form_data, 
     sanitize_all_inputs,
     validate_teacher_creation_form,
-    validate_student_registration_form
+    validate_student_registration_form,
+    validate_forgot_password_form,
+    validate_reset_password_form,
+    validate_login_form
 )
 
 def create_app():
@@ -1416,6 +1419,130 @@ def create_app():
         </body>
         </html>
         """
+
+    @app.route('/forgot_password', methods=['GET', 'POST'])
+    def forgot_password():
+        """Handle forgot password requests"""
+        if request.method == 'POST':
+            form_data = sanitize_all_inputs(request.form.to_dict())
+            step = form_data.get('step', 'request_code')
+            
+            if step == 'request_code':
+                # Validate email input
+                is_valid, errors, sanitized_data = validate_forgot_password_form(form_data)
+                if not is_valid:
+                    for field, error in errors.items():
+                        flash(f'{error}', 'error')
+                    return render_template('forgot_password.html', code_sent=False)
+                
+                email = sanitized_data['email']
+                
+                # Check if teacher exists and has changed password
+                teacher = Teacher.query.filter_by(email=email).first()
+                if not teacher:
+                    flash('No teacher account found with this email address', 'error')
+                    return render_template('forgot_password.html', code_sent=False)
+                
+                if teacher.must_change_password:
+                    flash('Password reset is only available after you have logged in and changed your initial password', 'error')
+                    return render_template('forgot_password.html', code_sent=False)
+                
+                # Generate reset code
+                from models import PasswordReset
+                reset_code = PasswordReset.generate_reset_code()
+                expires_at = datetime.utcnow() + timedelta(minutes=15)
+                
+                # Create reset record
+                password_reset = PasswordReset(
+                    teacher_id=teacher.id,
+                    reset_code=reset_code,
+                    email=email,
+                    expires_at=expires_at
+                )
+                
+                try:
+                    db.session.add(password_reset)
+                    db.session.commit()
+                    
+                    # Send email with reset code
+                    email_content = f"""
+                    <h2>Password Reset Request</h2>
+                    <p>Hello {teacher.full_name},</p>
+                    <p>You requested to reset your password for the QR Attendance System.</p>
+                    <p><strong>Your reset code is: <span style="font-size: 24px; font-family: monospace; background: #f5f5f5; padding: 8px; border-radius: 4px;">{reset_code}</span></strong></p>
+                    <p>This code will expire in 15 minutes.</p>
+                    <p>If you didn't request this reset, please ignore this email.</p>
+                    <hr>
+                    <p><small>QR Attendance System</small></p>
+                    """
+                    
+                    if send_email(email, "Password Reset Code - QR Attendance System", email_content):
+                        flash('Reset code sent to your email address', 'success')
+                        return render_template('forgot_password.html', code_sent=True, email=email)
+                    else:
+                        flash('Failed to send email. Please try again later.', 'error')
+                        return render_template('forgot_password.html', code_sent=False)
+                        
+                except Exception as e:
+                    db.session.rollback()
+                    flash('Error processing request. Please try again.', 'error')
+                    return render_template('forgot_password.html', code_sent=False)
+            
+            elif step == 'resend_code':
+                # Resend code logic (same as request_code)
+                return redirect(url_for('forgot_password'))
+        
+        return render_template('forgot_password.html', code_sent=False)
+
+    @app.route('/reset_password', methods=['POST'])
+    def reset_password():
+        """Handle password reset with verification code"""
+        form_data = sanitize_all_inputs(request.form.to_dict())
+        
+        # Validate reset form
+        is_valid, errors, sanitized_data = validate_reset_password_form(form_data)
+        if not is_valid:
+            for field, error in errors.items():
+                flash(f'{error}', 'error')
+            return redirect(url_for('forgot_password'))
+        
+        reset_code = sanitized_data['reset_code']
+        new_password = sanitized_data['new_password']
+        
+        # Find valid reset record
+        from models import PasswordReset
+        password_reset = PasswordReset.query.filter_by(
+            reset_code=reset_code,
+            is_used=False
+        ).first()
+        
+        if not password_reset or not password_reset.is_valid():
+            flash('Invalid or expired reset code', 'error')
+            return redirect(url_for('forgot_password'))
+        
+        # Get teacher
+        teacher = Teacher.query.get(password_reset.teacher_id)
+        if not teacher:
+            flash('Teacher account not found', 'error')
+            return redirect(url_for('forgot_password'))
+        
+        try:
+            # Update password
+            teacher.password_hash = generate_password_hash(new_password)
+            teacher.must_change_password = False
+            
+            # Mark reset as used
+            password_reset.is_used = True
+            
+            db.session.commit()
+            
+            flash('Password reset successfully! You can now login with your new password.', 'success')
+            return redirect(url_for('login'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash('Error resetting password. Please try again.', 'error')
+            return redirect(url_for('forgot_password'))
 
     def export_to_excel(attendance_data, session, course):
         """Export attendance data to Excel format"""
