@@ -166,7 +166,11 @@ def create_app():
         qr.make(fit=True)
         
         img = qr.make_image(fill_color="black", back_color="white")
-        filepath = os.path.join(config.QR_CODES_FOLDER, filename)
+        
+        # For Render deployment, save to static folder which is served by the web server
+        static_qr_path = os.path.join('static', 'qr_codes')
+        os.makedirs(static_qr_path, exist_ok=True)
+        filepath = os.path.join(static_qr_path, filename)
         img.save(filepath)
         return filepath
 
@@ -647,7 +651,7 @@ def create_app():
                     'success': f'Registration successful! You are now registered for {total_courses} course(s).',
                     'student_name': name,
                     'matricule': matricule,
-                    'course_name': course.course_name
+                    'course_name': course.name
                 })
             except Exception as e:
                 db.session.rollback()
@@ -1187,6 +1191,67 @@ def create_app():
             flash(f'Error regenerating QR codes: {str(e)}', 'error')
         
         return redirect(url_for('admin_dashboard'))
+    
+    @app.route('/admin/fix_qr_codes')
+    @login_required
+    def fix_qr_codes():
+        """Fix missing QR codes for existing courses and sessions"""
+        if not isinstance(current_user, Admin):
+            flash('Access denied', 'error')
+            return redirect(url_for('login'))
+        
+        try:
+            # Ensure QR codes directory exists
+            os.makedirs('static/qr_codes', exist_ok=True)
+            
+            courses_fixed = 0
+            sessions_fixed = 0
+            
+            # Fix course QR codes
+            courses = Course.query.all()
+            for course in courses:
+                # Check if QR code file exists
+                qr_missing = True
+                if course.registration_qr_code:
+                    qr_path = os.path.join('static/qr_codes', course.registration_qr_code)
+                    qr_missing = not os.path.exists(qr_path)
+                
+                if qr_missing:
+                    # Generate new QR code
+                    registration_url = get_external_url('student_registration', course_id=course.id)
+                    qr_filename = f'registration_{course.id}.png'
+                    generate_qr_code(registration_url, qr_filename)
+                    
+                    course.registration_qr_code = qr_filename
+                    courses_fixed += 1
+            
+            # Fix active session QR codes
+            sessions = AttendanceSession.query.filter_by(is_active=True).all()
+            for session in sessions:
+                # Check if QR code file exists
+                qr_missing = True
+                if session.qr_code_path:
+                    qr_path = os.path.join('static/qr_codes', session.qr_code_path)
+                    qr_missing = not os.path.exists(qr_path)
+                
+                if qr_missing:
+                    # Generate new QR code
+                    attendance_url = get_external_url('take_attendance', session_id=session.id)
+                    qr_filename = f'session_{session.id}.png'
+                    generate_qr_code(attendance_url, qr_filename)
+                    
+                    session.qr_code_path = qr_filename
+                    sessions_fixed += 1
+            
+            db.session.commit()
+            
+            flash(f'✅ QR codes fixed! Regenerated {courses_fixed} course QR codes and {sessions_fixed} session QR codes', 'success')
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error fixing QR codes: {str(e)}', 'error')
+        
+        return redirect(url_for('admin_dashboard'))
 
     @app.route('/mobile-qr-test')
     def mobile_qr_test():
@@ -1325,7 +1390,7 @@ def create_app():
         for course in courses:
             registration_url = get_external_url('student_registration', course_id=course.id)
             course_qr_info.append({
-                'course_name': course.course_name,
+                'course_name': course.name,
                 'course_id': course.id,
                 'registration_url': registration_url,
                 'qr_file': course.registration_qr_code
@@ -1573,12 +1638,12 @@ def create_app():
         
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, sheet_name=f'{course.course_code}_Attendance', index=False)
+            df.to_excel(writer, sheet_name=f'{course.code}_Attendance', index=False)
             
             # Add summary sheet
             summary_data = {
-                'Course': [course.course_name],
-                'Course Code': [course.course_code],
+                'Course': [course.name],
+                'Course Code': [course.code],
                 'Session': [session.session_name],
                 'Date': [session.created_at.strftime('%Y-%m-%d %H:%M:%S')],
                 'Total Students': [len(attendance_data)],
@@ -1589,7 +1654,7 @@ def create_app():
             summary_df.to_excel(writer, sheet_name='Summary', index=False)
         
         output.seek(0)
-        filename = f"{course.course_code}_{session.session_name.replace(' ', '_')}_attendance.xlsx"
+        filename = f"{course.code}_{session.session_name.replace(' ', '_')}_attendance.xlsx"
         
         return send_file(
             output,
@@ -1611,13 +1676,13 @@ def create_app():
         styles = getSampleStyleSheet()
         
         # Title
-        title = Paragraph(f"<b>{course.course_name} - Attendance Report</b>", styles['Title'])
+        title = Paragraph(f"<b>{course.name} - Attendance Report</b>", styles['Title'])
         elements.append(title)
         elements.append(Spacer(1, 12))
         
         # Session info
         session_info = f"""
-        <b>Course Code:</b> {course.course_code}<br/>
+        <b>Course Code:</b> {course.code}<br/>
         <b>Session:</b> {session.session_name}<br/>
         <b>Date:</b> {session.created_at.strftime('%Y-%m-%d %H:%M:%S')}<br/>
         <b>Total Students:</b> {len(attendance_data)}<br/>
@@ -1655,7 +1720,7 @@ def create_app():
         doc.build(elements)
         
         output.seek(0)
-        filename = f"{course.course_code}_{session.session_name.replace(' ', '_')}_attendance.pdf"
+        filename = f"{course.code}_{session.session_name.replace(' ', '_')}_attendance.pdf"
         
         return send_file(
             output,
@@ -1687,6 +1752,14 @@ def create_app():
     
     # Store the function in app for later use
     app.ensure_database_tables = ensure_database_tables
+    
+    # Add debug routes for troubleshooting (only in production for Render)
+    try:
+        from debug_routes import add_debug_routes
+        add_debug_routes(app, db)
+        print("🔧 Debug routes added for troubleshooting")
+    except ImportError:
+        print("⚠️  Debug routes not available")
 
     return app
 
