@@ -101,11 +101,21 @@ def create_app():
         characters = string.ascii_letters + string.digits + "!@#$%^&*"
         return ''.join(secrets.choice(characters) for _ in range(length))
 
-    def send_email(to, subject, template, **kwargs):
+    def send_email(to, subject, template, email_type='general', **kwargs):
         # Use environment variables or fallback to working credentials from app.py
         mail_username = app.config['MAIL_USERNAME'] or 'notorios2003@gmail.com'
         mail_password = app.config['MAIL_PASSWORD'] or 'thsl usar tiol uvxi'
-        mail_sender = app.config['MAIL_DEFAULT_SENDER'] or 'notorios2003@gmail.com'
+        
+        # Different sender names based on email type
+        if email_type == 'forgot_password':
+            mail_sender = 'QR Attendance Security <notorios2003@gmail.com>'
+            sender_name = 'QR Attendance Security Team'
+        elif email_type == 'credentials':
+            mail_sender = 'QR Attendance Admin <notorios2003@gmail.com>'
+            sender_name = 'QR Attendance Admin'
+        else:
+            mail_sender = 'QR Attendance System <notorios2003@gmail.com>'
+            sender_name = 'QR Attendance System'
         
         if not mail_username or not mail_password:
             print("❌ Email not configured - skipping email send")
@@ -117,16 +127,29 @@ def create_app():
             app.config['MAIL_PASSWORD'] = mail_password
             app.config['MAIL_DEFAULT_SENDER'] = mail_sender
             print(f"📧 Using fallback email configuration: {mail_username}")
+        
+        # Add sender info to template
+        enhanced_template = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            {template}
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #666; font-size: 12px; text-align: center;">
+                <strong>From:</strong> {sender_name}<br>
+                <strong>Email Type:</strong> {email_type.replace('_', ' ').title()}<br>
+                This is an automated message from QR Attendance System
+            </p>
+        </div>
+        """
             
         msg = Message(
             subject=subject,
             recipients=[to],
-            html=template,
+            html=enhanced_template,
             sender=mail_sender
         )
         try:
             mail.send(msg)
-            print(f"✅ Email sent successfully to {to}")
+            print(f"✅ Email sent successfully to {to} (Type: {email_type})")
             return True
         except Exception as e:
             print(f"❌ Failed to send email: {e}")
@@ -375,12 +398,12 @@ def create_app():
             validator = FormValidator()
             errors = []
             
-            course_name = form_data.get('course_name', '').strip()
+            course_name = form_data.get('name', '').strip()
             is_valid, message = validator.validate_name(course_name)
             if not is_valid:
                 errors.append(f'Course name: {message}')
             
-            course_code = form_data.get('course_code', '').strip().upper()
+            course_code = form_data.get('code', '').strip().upper()
             if not course_code:
                 errors.append('Course code is required')
             elif len(course_code) < 3 or len(course_code) > 20:
@@ -395,7 +418,7 @@ def create_app():
             
             # Check if course code already exists for this teacher
             existing_course = Course.query.filter_by(
-                course_code=course_code, 
+                code=course_code, 
                 teacher_id=current_user.id
             ).first()
             
@@ -406,9 +429,8 @@ def create_app():
             description = form_data.get('description', '')
             
             course = Course(
-                course_name=course_name,
-                course_code=course_code,
-                description=description,
+                name=course_name,
+                code=course_code,
                 teacher_id=current_user.id
             )
             
@@ -534,7 +556,7 @@ def create_app():
                 <p>For mobile access, scan QR codes from your phone!</p>
                 """
                 
-                if send_email(email, "QR Attendance System - Account Created", email_template):
+                if send_email(email, "QR Attendance System - Account Created", email_template, email_type='credentials'):
                     flash(f'Teacher {full_name} created successfully! Credentials sent to {email}', 'success')
                 else:
                     flash(f'Teacher {full_name} created successfully! Please manually share credentials: Username: {username}, Password: {temp_password}', 'warning')
@@ -1476,7 +1498,7 @@ def create_app():
                     <p><small>QR Attendance System</small></p>
                     """
                     
-                    if send_email(email, "Password Reset Code - QR Attendance System", email_content):
+                    if send_email(email, "Password Reset Code - QR Attendance System", email_content, email_type='forgot_password'):
                         flash('Reset code sent to your email address', 'success')
                         return render_template('forgot_password.html', code_sent=True, email=email)
                     else:
