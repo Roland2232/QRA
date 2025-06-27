@@ -136,109 +136,123 @@
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Form submission enhancements
-    const adminForm = document.getElementById('adminForm');
-    const teacherForm = document.getElementById('teacherForm');
-    const adminBtn = document.getElementById('adminBtn');
-    const teacherBtn = document.getElementById('teacherBtn');
-    
-    // Admin form submission
-    adminForm.addEventListener('submit', function(e) {
-        adminBtn.disabled = true;
-        adminBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+SafeDOM.ready(function() {
+    try {
+        // Form submission enhancements
+        const adminForm = SafeDOM.getElementById('adminForm');
+        const teacherForm = SafeDOM.getElementById('teacherForm');
+        const adminBtn = SafeDOM.getElementById('adminBtn');
+        const teacherBtn = SafeDOM.getElementById('teacherBtn');
         
-        // Add slight delay to show loading state
-        setTimeout(() => {
-            // Form will submit normally
-        }, 100);
-    });
-    
-    // Teacher form submission
-    teacherForm.addEventListener('submit', function(e) {
-        teacherBtn.disabled = true;
-        teacherBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing In...';
+        // Admin form submission
+        if (adminForm && adminBtn) {
+            SafeDOM.addEventListenerSafe(adminForm, 'submit', function(e) {
+                adminBtn.disabled = true;
+                SafeDOM.setInnerHTMLSafe(adminBtn, '<i class="fas fa-spinner fa-spin"></i> Verifying...');
+                
+                // Add slight delay to show loading state
+                setTimeout(() => {
+                    // Form will submit normally
+                }, 100);
+            });
+        }
         
-        // Add slight delay to show loading state
-        setTimeout(() => {
-            // Form will submit normally
-        }, 100);
-    });
-    
-    // Auto-focus on first empty field
-    const adminCodeInput = document.getElementById('admin_code');
-    const usernameInput = document.getElementById('username');
-    
-    // Focus on admin code if it's empty, otherwise focus on username
-    if (adminCodeInput.value.trim() === '') {
-        adminCodeInput.focus();
-    } else if (usernameInput.value.trim() === '') {
-        usernameInput.focus();
-    }
-    
-    // Input validation feedback
-    const inputs = document.querySelectorAll('input[required]');
-    inputs.forEach(input => {
-        input.addEventListener('blur', function() {
-            if (this.value.trim() === '') {
-                this.classList.add('is-invalid');
-            } else {
-                this.classList.remove('is-invalid');
-                this.classList.add('is-valid');
-            }
-        });
+        // Teacher form submission
+        if (teacherForm && teacherBtn) {
+            SafeDOM.addEventListenerSafe(teacherForm, 'submit', function(e) {
+                teacherBtn.disabled = true;
+                SafeDOM.setInnerHTMLSafe(teacherBtn, '<i class="fas fa-spinner fa-spin"></i> Signing In...');
+                
+                // Add slight delay to show loading state
+                setTimeout(() => {
+                    // Form will submit normally
+                }, 100);
+            });
+        }
         
-        input.addEventListener('input', function() {
-            if (this.value.trim() !== '') {
-                this.classList.remove('is-invalid');
-                this.classList.add('is-valid');
-            }
-        });
-    });
-    
-    // Prevent zoom on iOS when focusing on input fields
-    if (window.innerWidth < 768) {
+        // Auto-focus on first empty field
+        const adminCodeInput = SafeDOM.getElementById('admin_code');
+        const usernameInput = SafeDOM.getElementById('username');
+        
+        // Focus on admin code if it's empty, otherwise focus on username
+        if (adminCodeInput && adminCodeInput.value.trim() === '') {
+            adminCodeInput.focus();
+        } else if (usernameInput && usernameInput.value.trim() === '') {
+            usernameInput.focus();
+        }
+        
+        // Input validation feedback
+        const inputs = SafeDOM.querySelectorAll('input[required]');
         inputs.forEach(input => {
-            input.addEventListener('focus', function() {
-                this.style.fontSize = '16px';
+            SafeDOM.addEventListenerSafe(input, 'blur', function() {
+                if (this.value.trim() === '') {
+                    this.classList.add('is-invalid');
+                } else {
+                    this.classList.remove('is-invalid');
+                    this.classList.add('is-valid');
+                }
+            });
+            
+            SafeDOM.addEventListenerSafe(input, 'input', function() {
+                if (this.value.trim() !== '') {
+                    this.classList.remove('is-invalid');
+                    this.classList.add('is-valid');
+                }
             });
         });
-    }
-    
-    // Auto-uppercase admin code
-    adminCodeInput.addEventListener('input', function() {
-        this.value = this.value.toUpperCase();
-    });
-    
-    // Show/hide password functionality
-    const passwordInput = document.getElementById('password');
-    const adminCodeInputField = document.getElementById('admin_code');
-    
-    // Add show/hide password toggle for mobile
-    if (window.innerWidth < 768) {
-        [passwordInput, adminCodeInputField].forEach(input => {
-            if (input) {
-                const wrapper = input.parentElement;
-                const toggleBtn = document.createElement('button');
-                toggleBtn.type = 'button';
-                toggleBtn.className = 'btn btn-outline-secondary btn-sm position-absolute top-50 end-0 translate-middle-y me-2';
-                toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
-                toggleBtn.style.zIndex = '10';
-                
-                wrapper.style.position = 'relative';
-                wrapper.appendChild(toggleBtn);
-                
-                toggleBtn.addEventListener('click', function() {
-                    if (input.type === 'password') {
-                        input.type = 'text';
-                        this.innerHTML = '<i class="fas fa-eye-slash"></i>';
-                    } else {
-                        input.type = 'password';
-                        this.innerHTML = '<i class="fas fa-eye"></i>';
-                    }
+        
+        // Prevent zoom on iOS when focusing on input fields
+        if (window.innerWidth < 768) {
+            inputs.forEach(input => {
+                SafeDOM.addEventListenerSafe(input, 'focus', function() {
+                    this.style.fontSize = '16px';
                 });
-            }
-        });
+            });
+        }
+        
+        // Auto-uppercase admin code
+        if (adminCodeInput) {
+            SafeDOM.addEventListenerSafe(adminCodeInput, 'input', function() {
+                this.value = this.value.toUpperCase();
+            });
+        }
+        
+        // Show/hide password functionality
+        const passwordInput = SafeDOM.getElementById('password');
+        const adminCodeInputField = SafeDOM.getElementById('admin_code');
+        
+        // Add show/hide password toggle for mobile
+        if (window.innerWidth < 768) {
+            [passwordInput, adminCodeInputField].forEach(input => {
+                if (input) {
+                    try {
+                        const wrapper = input.parentElement;
+                        const toggleBtn = document.createElement('button');
+                        toggleBtn.type = 'button';
+                        toggleBtn.className = 'btn btn-outline-secondary btn-sm position-absolute top-50 end-0 translate-middle-y me-2';
+                        toggleBtn.innerHTML = '<i class="fas fa-eye"></i>';
+                        toggleBtn.style.zIndex = '10';
+                        
+                        wrapper.style.position = 'relative';
+                        wrapper.appendChild(toggleBtn);
+                        
+                        SafeDOM.addEventListenerSafe(toggleBtn, 'click', function() {
+                            if (input.type === 'password') {
+                                input.type = 'text';
+                                this.innerHTML = '<i class="fas fa-eye-slash"></i>';
+                            } else {
+                                input.type = 'password';
+                                this.innerHTML = '<i class="fas fa-eye"></i>';
+                            }
+                        });
+                    } catch (e) {
+                        console.warn('Could not add password toggle for input:', e);
+                    }
+                }
+            });
+        }
+    } catch (e) {
+        console.error('Error in login page JavaScript:', e);
     }
 });
 </script>

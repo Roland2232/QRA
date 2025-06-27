@@ -22,6 +22,12 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from functools import wraps
+from validation import (
+    validate_teacher_creation_form, 
+    validate_student_registration_form, 
+    validate_login_form,
+    sanitize_all_inputs
+)
 
 def get_network_ip():
     """Get the actual network IP address that mobile devices can connect to"""
@@ -281,9 +287,18 @@ def mobile_test():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
+        # Sanitize and validate login inputs
+        form_data = request.form.to_dict()
+        is_valid, errors, sanitized_data = validate_login_form(form_data)
+        
+        if not is_valid:
+            for field, error in errors.items():
+                flash(f'{error}', 'error')
+            return render_template('login.html')
+        
         # Check if it's admin login (has admin_code field)
-        if 'admin_code' in request.form:
-            admin_code = request.form['admin_code']
+        if 'admin_code' in form_data:
+            admin_code = sanitized_data['admin_code']
             
             if admin_code == '23456':
                 # Create a temporary admin session
@@ -299,16 +314,16 @@ def login():
                     db.session.commit()
                 
                 login_user(admin)
-                flash('Admin access granted')
+                flash('Admin access granted', 'success')
                 return redirect(url_for('admin_dashboard'))
             else:
-                flash('Invalid admin code')
+                flash('Invalid admin code', 'error')
                 return redirect(url_for('login'))
                 
         # Check if it's teacher login (has username and password fields)
-        elif 'username' in request.form and 'password' in request.form:
-            username = request.form['username']
-            password = request.form['password']
+        elif 'username' in form_data and 'password' in form_data:
+            username = sanitized_data['username']
+            password = form_data['password']  # Don't sanitize password
             
             teacher = Teacher.query.filter_by(username=username).first()
             
@@ -320,13 +335,13 @@ def login():
                     flash('You must change your password before continuing', 'warning')
                     return redirect(url_for('change_password'))
                 
-                flash('Welcome back!')
+                flash('Welcome back!', 'success')
                 return redirect(url_for('teacher_dashboard'))
             else:
-                flash('Invalid credentials')
+                flash('Invalid credentials', 'error')
                 return redirect(url_for('login'))
         else:
-            flash('Invalid login attempt')
+            flash('Invalid login attempt', 'error')
             return redirect(url_for('login'))
     
     return render_template('login.html')
@@ -375,20 +390,30 @@ def admin_dashboard():
 @login_required
 def create_teacher():
     if not isinstance(current_user, Admin):
-        flash('Access denied')
+        flash('Access denied', 'error')
         return redirect(url_for('index'))
     
     if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        full_name = request.form['full_name']
+        # Comprehensive form validation and sanitization
+        form_data = request.form.to_dict()
+        is_valid, errors, sanitized_data = validate_teacher_creation_form(form_data)
         
+        if not is_valid:
+            for field, error in errors.items():
+                flash(f'{error}', 'error')
+            return render_template('create_teacher.html')
+        
+        username = sanitized_data['username']
+        email = sanitized_data['email']
+        full_name = sanitized_data['full_name']
+        
+        # Check for existing username and email
         if Teacher.query.filter_by(username=username).first():
-            flash('Username already exists')
+            flash('Username already exists', 'error')
             return render_template('create_teacher.html')
         
         if Teacher.query.filter_by(email=email).first():
-            flash('Email already exists')
+            flash('Email already exists', 'error')
             return render_template('create_teacher.html')
         
         password = generate_password()
@@ -533,9 +558,19 @@ def student_registration(course_id):
     course = Course.query.get_or_404(course_id)
     
     if request.method == 'POST':
-        name = request.form['name']
-        matricule = request.form['matricule']
-        sex = request.form['sex']
+        # Comprehensive form validation and sanitization
+        form_data = request.form.to_dict()
+        is_valid, errors, sanitized_data = validate_student_registration_form(form_data)
+        
+        if not is_valid:
+            error_messages = []
+            for field, error in errors.items():
+                error_messages.append(error)
+            return jsonify({'error': '; '.join(error_messages)}), 400
+        
+        name = sanitized_data['name']
+        matricule = sanitized_data['matricule'].upper()  # Ensure ICTU format is uppercase
+        sex = sanitized_data['sex']
         
         # Check if student is already registered for THIS specific course
         existing_registration = Student.query.filter_by(matricule=matricule, course_id=course_id).first()

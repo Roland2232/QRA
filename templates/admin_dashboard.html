@@ -133,37 +133,67 @@
 {% block scripts %}
 <script>
 function confirmDelete(teacherId, teacherName, teacherUsername) {
-    // Set the teacher information in the modal
-    document.getElementById('teacherName').textContent = teacherName;
-    document.getElementById('teacherUsername').textContent = teacherUsername;
-    
-    // Set the form action to the delete URL
-    document.getElementById('deleteTeacherForm').action = `/admin/delete_teacher/${teacherId}`;
-    
-    // Show the modal
-    const modal = new bootstrap.Modal(document.getElementById('deleteTeacherModal'));
-    modal.show();
+    try {
+        // Set the teacher information in the modal using SafeDOM
+        const teacherNameEl = SafeDOM.getElementById('teacherName');
+        const teacherUsernameEl = SafeDOM.getElementById('teacherUsername');
+        const deleteForm = SafeDOM.getElementById('deleteTeacherForm');
+        const modalEl = SafeDOM.getElementById('deleteTeacherModal');
+        
+        if (teacherNameEl) {
+            teacherNameEl.textContent = teacherName;
+        }
+        
+        if (teacherUsernameEl) {
+            teacherUsernameEl.textContent = teacherUsername;
+        }
+        
+        // Set the form action to the delete URL
+        if (deleteForm) {
+            deleteForm.action = `/admin/delete_teacher/${teacherId}`;
+        }
+        
+        // Show the modal
+        if (modalEl && typeof bootstrap !== 'undefined') {
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        } else {
+            console.warn('Modal element or Bootstrap not available');
+        }
+    } catch (e) {
+        console.error('Error in confirmDelete function:', e);
+        // Fallback: confirm with browser dialog
+        if (confirm(`Are you sure you want to delete teacher ${teacherName} (${teacherUsername})?`)) {
+            window.location.href = `/admin/delete_teacher/${teacherId}`;
+        }
+    }
 }
 
 // Add confirmation to prevent accidental clicks
-document.addEventListener('DOMContentLoaded', function() {
-    const deleteButtons = document.querySelectorAll('button[onclick^="confirmDelete"]');
-    deleteButtons.forEach(button => {
-        button.addEventListener('click', function(e) {
-            // The onclick handler will show the modal
-            // This is just for additional safety
-            e.preventDefault();
+SafeDOM.ready(function() {
+    try {
+        const deleteButtons = SafeDOM.querySelectorAll('button[onclick^="confirmDelete"]');
+        deleteButtons.forEach(button => {
+            SafeDOM.addEventListenerSafe(button, 'click', function(e) {
+                // The onclick handler will show the modal
+                // This is just for additional safety
+                e.preventDefault();
+            });
         });
-    });
-    
-    // Add loading state to delete form
-    const deleteForm = document.getElementById('deleteTeacherForm');
-    if (deleteForm) {
-        deleteForm.addEventListener('submit', function() {
-            const submitBtn = this.querySelector('button[type="submit"]');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
-        });
+        
+        // Add loading state to delete form
+        const deleteForm = SafeDOM.getElementById('deleteTeacherForm');
+        if (deleteForm) {
+            SafeDOM.addEventListenerSafe(deleteForm, 'submit', function() {
+                const submitBtn = this.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    SafeDOM.setInnerHTMLSafe(submitBtn, '<i class="fas fa-spinner fa-spin"></i> Deleting...');
+                }
+            });
+        }
+    } catch (e) {
+        console.error('Error in admin dashboard JavaScript:', e);
     }
 });
 </script>

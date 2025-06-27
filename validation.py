@@ -1,17 +1,51 @@
+"""
+Comprehensive form validation and security utility for QR Attendance System
+Protects against SQL injection, XSS, and validates input formats
+"""
+
 import re
 import smtplib
 import dns.resolver
 from email.utils import parseaddr
 from werkzeug.utils import secure_filename
 import bleach
+import html
 from flask import flash
 
 class FormValidator:
     """Comprehensive form validation utility class"""
     
     @staticmethod
+    def validate_teacher_name(name):
+        """Validate teacher name: letters, spaces, hyphens, and apostrophes only (no numbers)"""
+        if not name:
+            return False, "Teacher name is required"
+        
+        name = name.strip()
+        
+        if len(name) < 2:
+            return False, "Teacher name must be at least 2 characters long"
+        
+        if len(name) > 100:
+            return False, "Teacher name must not exceed 100 characters"
+        
+        # Only allow letters, spaces, hyphens, apostrophes, and dots (no numbers)
+        if not re.match(r"^[a-zA-Z\s\-'.]+$", name):
+            return False, "Teacher name can only contain letters, spaces, hyphens, apostrophes, and dots (no numbers allowed)"
+        
+        # Check for consecutive spaces or special characters
+        if re.search(r'\s{2,}', name) or re.search(r'[-\'.]{2,}', name):
+            return False, "Teacher name cannot contain consecutive spaces or special characters"
+        
+        # Must start and end with a letter
+        if len(name) > 1 and not re.match(r'^[a-zA-Z].*[a-zA-Z]$', name):
+            return False, "Teacher name must start and end with a letter"
+        
+        return True, "Valid teacher name"
+    
+    @staticmethod
     def validate_username(username):
-        """Validate username: minimum 4 characters, alphanumeric and underscore only"""
+        """Validate username: minimum 4 letters, alphanumeric and underscore only"""
         if not username:
             return False, "Username is required"
         
@@ -23,62 +57,75 @@ class FormValidator:
         if len(username) > 20:
             return False, "Username must not exceed 20 characters"
         
+        # Must contain at least 4 letters
+        letter_count = len(re.findall(r'[a-zA-Z]', username))
+        if letter_count < 4:
+            return False, "Username must contain at least 4 letters"
+        
         if not re.match(r'^[a-zA-Z0-9_]+$', username):
             return False, "Username can only contain letters, numbers, and underscores"
         
         if username.startswith('_') or username.endswith('_'):
             return False, "Username cannot start or end with underscore"
         
+        # Check for suspicious patterns
+        if re.search(r'(-0|-1|admin|root|test)', username, re.IGNORECASE):
+            return False, "Username contains invalid pattern"
+        
         return True, "Valid username"
     
     @staticmethod
-    def validate_name(name):
-        """Validate name: letters, spaces, hyphens, and apostrophes only"""
+    def validate_student_name(name):
+        """Validate student name: letters, spaces, hyphens, and apostrophes only"""
         if not name:
-            return False, "Name is required"
+            return False, "Student name is required"
         
         name = name.strip()
         
         if len(name) < 2:
-            return False, "Name must be at least 2 characters long"
+            return False, "Student name must be at least 2 characters long"
         
         if len(name) > 100:
-            return False, "Name must not exceed 100 characters"
+            return False, "Student name must not exceed 100 characters"
         
         # Allow letters, spaces, hyphens, apostrophes, and dots (for initials)
         if not re.match(r"^[a-zA-Z\s\-'.]+$", name):
-            return False, "Name can only contain letters, spaces, hyphens, apostrophes, and dots"
+            return False, "Student name can only contain letters, spaces, hyphens, apostrophes, and dots"
         
         # Check for consecutive spaces or special characters
         if re.search(r'\s{2,}', name) or re.search(r'[-\'.]{2,}', name):
-            return False, "Name cannot contain consecutive spaces or special characters"
+            return False, "Student name cannot contain consecutive spaces or special characters"
         
         # Must start and end with a letter
-        if not re.match(r'^[a-zA-Z].*[a-zA-Z]$', name) and len(name) > 1:
-            return False, "Name must start and end with a letter"
+        if len(name) > 1 and not re.match(r'^[a-zA-Z].*[a-zA-Z]$', name):
+            return False, "Student name must start and end with a letter"
         
-        return True, "Valid name"
+        return True, "Valid student name"
     
     @staticmethod
     def validate_matricule(matricule):
-        """Validate matricule: must be 'ictu' followed by exactly 8 digits"""
+        """Validate matricule: must be 'ICTU' followed by exactly 8 digits"""
         if not matricule:
             return False, "Matricule is required"
         
-        matricule = matricule.strip().lower()
+        matricule = matricule.strip().upper()  # Convert to uppercase for consistency
         
-        if not re.match(r'^ictu\d{8}$', matricule):
-            return False, "Matricule must be 'ictu' followed by exactly 8 digits (e.g., ictu12345678)"
+        if not re.match(r'^ICTU\d{8}$', matricule):
+            return False, "Matricule must be 'ICTU' followed by exactly 8 digits (e.g., ICTU12345678)"
         
         return True, "Valid matricule"
     
     @staticmethod
     def validate_email(email):
-        """Validate email format and check if domain exists"""
+        """Validate email format with comprehensive security checks"""
         if not email:
             return False, "Email is required"
         
         email = email.strip().lower()
+        
+        # Check for basic security patterns
+        if re.search(r'[<>"\';\\]', email):
+            return False, "Email contains invalid characters"
         
         # Basic format validation
         if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', email):
@@ -99,17 +146,19 @@ class FormValidator:
         if len(domain) > 255:
             return False, "Email domain too long"
         
+        # Check for suspicious patterns
+        suspicious_patterns = [
+            r'(script|javascript|vbscript)',
+            r'[<>]',
+            r'(drop|delete|insert|update|select|union)',
+            r'(-0|-1|admin@|test@|temp@)'
+        ]
+        
+        for pattern in suspicious_patterns:
+            if re.search(pattern, email, re.IGNORECASE):
+                return False, "Email contains invalid pattern"
+        
         return True, "Valid email format"
-    
-    @staticmethod
-    def validate_email_domain(email):
-        """Check if email domain has MX record (more thorough validation)"""
-        try:
-            domain = email.split('@')[1]
-            mx_records = dns.resolver.resolve(domain, 'MX')
-            return len(mx_records) > 0, "Email domain exists"
-        except:
-            return False, "Email domain does not exist or cannot be verified"
     
     @staticmethod
     def validate_password(password):
@@ -156,12 +205,15 @@ class FormValidator:
     
     @staticmethod
     def sanitize_input(text):
-        """Sanitize input to prevent XSS and injection attacks"""
+        """Comprehensive input sanitization to prevent XSS and injection attacks"""
         if not text:
             return ""
         
         # Remove any HTML tags and suspicious characters
         sanitized = bleach.clean(str(text).strip(), tags=[], strip=True)
+        
+        # HTML escape
+        sanitized = html.escape(sanitized)
         
         # Remove SQL injection patterns
         sql_patterns = [
@@ -169,10 +221,21 @@ class FormValidator:
             r'([\'";])',
             r'(--|\#|\/\*|\*\/)',
             r'(\bOR\b|\bAND\b)(\s+\d+\s*=\s*\d+)',
+            r'(\bor\b|\band\b)(\s+\d+\s*=\s*\d+)',
+            r'(<script|</script>|javascript:|vbscript:)',
+            r'(onload|onerror|onclick|onmouseover)=',
         ]
         
         for pattern in sql_patterns:
             sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE)
+        
+        # Remove dangerous characters and patterns
+        dangerous_chars = ['<', '>', '"', "'", ';', '--', '/*', '*/', '=', '|']
+        for char in dangerous_chars:
+            sanitized = sanitized.replace(char, '')
+        
+        # Remove numbers that could be used for injection (-0, -1, etc.)
+        sanitized = re.sub(r'-[0-9]+', '', sanitized)
         
         return sanitized.strip()
     
@@ -253,7 +316,163 @@ class FormValidator:
             return False, "Course code can only contain letters, numbers, and hyphens"
         
         return True, "Valid course code"
+    
+    @staticmethod
+    def validate_sex(sex):
+        """Validate sex field"""
+        if not sex:
+            return False, "Sex is required"
+        
+        sex = sex.strip()
+        if sex not in ['Male', 'Female']:
+            return False, "Sex must be either 'Male' or 'Female'"
+        
+        return True, "Valid sex"
 
+def validate_teacher_creation_form(form_data):
+    """
+    Comprehensive validation for teacher creation form
+    
+    Args:
+        form_data (dict): Form data to validate
+        
+    Returns:
+        tuple: (is_valid, errors_dict, sanitized_data)
+    """
+    validator = FormValidator()
+    errors = {}
+    
+    # Sanitize all inputs first
+    sanitized_data = {}
+    for key, value in form_data.items():
+        sanitized_data[key] = validator.sanitize_input(value)
+    
+    # Validate username
+    if 'username' in sanitized_data:
+        is_valid, message = validator.validate_username(sanitized_data['username'])
+        if not is_valid:
+            errors['username'] = message
+    else:
+        errors['username'] = "Username is required"
+    
+    # Validate teacher name
+    if 'full_name' in sanitized_data:
+        is_valid, message = validator.validate_teacher_name(sanitized_data['full_name'])
+        if not is_valid:
+            errors['full_name'] = message
+    else:
+        errors['full_name'] = "Full name is required"
+    
+    # Validate email
+    if 'email' in sanitized_data:
+        is_valid, message = validator.validate_email(sanitized_data['email'])
+        if not is_valid:
+            errors['email'] = message
+    else:
+        errors['email'] = "Email is required"
+    
+    return len(errors) == 0, errors, sanitized_data
+
+def validate_student_registration_form(form_data):
+    """
+    Comprehensive validation for student registration form
+    
+    Args:
+        form_data (dict): Form data to validate
+        
+    Returns:
+        tuple: (is_valid, errors_dict, sanitized_data)
+    """
+    validator = FormValidator()
+    errors = {}
+    
+    # Sanitize all inputs first
+    sanitized_data = {}
+    for key, value in form_data.items():
+        sanitized_data[key] = validator.sanitize_input(value) if key != 'matricule' else value.strip()
+    
+    # Validate student name
+    if 'name' in sanitized_data:
+        is_valid, message = validator.validate_student_name(sanitized_data['name'])
+        if not is_valid:
+            errors['name'] = message
+    else:
+        errors['name'] = "Student name is required"
+    
+    # Validate matricule (don't over-sanitize this as it has specific format)
+    if 'matricule' in sanitized_data:
+        is_valid, message = validator.validate_matricule(sanitized_data['matricule'])
+        if not is_valid:
+            errors['matricule'] = message
+    else:
+        errors['matricule'] = "Matricule is required"
+    
+    # Validate sex
+    if 'sex' in sanitized_data:
+        is_valid, message = validator.validate_sex(sanitized_data['sex'])
+        if not is_valid:
+            errors['sex'] = message
+    else:
+        errors['sex'] = "Sex is required"
+    
+    return len(errors) == 0, errors, sanitized_data
+
+def validate_login_form(form_data):
+    """
+    Comprehensive validation for login forms
+    
+    Args:
+        form_data (dict): Form data to validate
+        
+    Returns:
+        tuple: (is_valid, errors_dict, sanitized_data)
+    """
+    validator = FormValidator()
+    errors = {}
+    
+    # Sanitize all inputs first
+    sanitized_data = {}
+    for key, value in form_data.items():
+        sanitized_data[key] = validator.sanitize_input(value)
+    
+    # Validate username
+    if 'username' in sanitized_data:
+        username = sanitized_data['username']
+        if not username:
+            errors['username'] = "Username is required"
+        elif len(username) < 3:
+            errors['username'] = "Username must be at least 3 characters long"
+    
+    # Validate password
+    if 'password' in sanitized_data:
+        password = form_data['password']  # Don't sanitize password, just validate
+        if not password:
+            errors['password'] = "Password is required"
+        elif len(password) < 3:
+            errors['password'] = "Password must be at least 3 characters long"
+    
+    return len(errors) == 0, errors, sanitized_data
+
+def sanitize_all_inputs(form_data):
+    """
+    Sanitize all form inputs to prevent injection attacks
+    
+    Args:
+        form_data (dict): Form data to sanitize
+        
+    Returns:
+        dict: Sanitized form data
+    """
+    validator = FormValidator()
+    sanitized = {}
+    
+    for key, value in form_data.items():
+        if isinstance(value, str):
+            sanitized[key] = validator.sanitize_input(value)
+        else:
+            sanitized[key] = value
+    
+    return sanitized
 
 def validate_form_data(form_data, form_type):
     """
@@ -285,7 +504,7 @@ def validate_form_data(form_data, form_type):
     elif form_type == 'create_teacher':
         # Validate full name
         full_name = form_data.get('full_name', '').strip()
-        is_valid, message = validator.validate_name(full_name)
+        is_valid, message = validator.validate_teacher_name(full_name)
         if not is_valid:
             errors['full_name'] = message
         
@@ -304,7 +523,7 @@ def validate_form_data(form_data, form_type):
     elif form_type == 'student_registration':
         # Validate name
         name = form_data.get('name', '').strip()
-        is_valid, message = validator.validate_name(name)
+        is_valid, message = validator.validate_student_name(name)
         if not is_valid:
             errors['name'] = message
         
@@ -380,18 +599,4 @@ def validate_form_data(form_data, form_type):
             if not is_valid:
                 errors['location'] = message
     
-    return len(errors) == 0, errors
-
-
-def sanitize_all_inputs(form_data):
-    """Sanitize all form inputs to prevent injection attacks"""
-    validator = FormValidator()
-    sanitized_data = {}
-    
-    for key, value in form_data.items():
-        if isinstance(value, str):
-            sanitized_data[key] = validator.sanitize_input(value)
-        else:
-            sanitized_data[key] = value
-    
-    return sanitized_data 
+    return len(errors) == 0, errors 

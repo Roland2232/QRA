@@ -27,7 +27,13 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from functools import wraps
 from render_config import RenderConfig, validate_render_env
-from render_validation import FormValidator, validate_form_data, sanitize_all_inputs
+from render_validation import (
+    FormValidator, 
+    validate_form_data, 
+    sanitize_all_inputs,
+    validate_teacher_creation_form,
+    validate_student_registration_form
+)
 
 def create_app():
     """Application factory for Render deployment with enhanced security"""
@@ -464,18 +470,18 @@ def create_app():
             return redirect(url_for('login'))
         
         if request.method == 'POST':
-            # Sanitize and validate inputs
-            form_data = sanitize_all_inputs(request.form.to_dict())
-            is_valid, errors = validate_form_data(form_data, 'create_teacher')
+            # Comprehensive form validation and sanitization
+            form_data = request.form.to_dict()
+            is_valid, errors, sanitized_data = validate_teacher_creation_form(form_data)
             
             if not is_valid:
                 for field, error in errors.items():
                     flash(f'{error}', 'error')
                 return render_template('create_teacher.html')
             
-            username = form_data.get('username')
-            email = form_data.get('email')
-            full_name = form_data.get('full_name')
+            username = sanitized_data['username']
+            email = sanitized_data['email']
+            full_name = sanitized_data['full_name']
             
             # Check for existing username and email
             if Teacher.query.filter_by(username=username).first():
@@ -569,9 +575,9 @@ def create_app():
         course = Course.query.get_or_404(course_id)
         
         if request.method == 'POST':
-            # Sanitize and validate inputs
-            form_data = sanitize_all_inputs(request.form.to_dict())
-            is_valid, errors = validate_form_data(form_data, 'student_registration')
+            # Comprehensive form validation and sanitization
+            form_data = request.form.to_dict()
+            is_valid, errors, sanitized_data = validate_student_registration_form(form_data)
             
             if not is_valid:
                 error_messages = []
@@ -579,9 +585,9 @@ def create_app():
                     error_messages.append(error)
                 return jsonify({'error': '; '.join(error_messages)}), 400
             
-            name = form_data['name']
-            matricule = form_data['matricule'].lower()  # Ensure lowercase for consistency
-            sex = form_data['sex']
+            name = sanitized_data['name']
+            matricule = sanitized_data['matricule'].upper()  # Ensure ICTU format is uppercase
+            sex = sanitized_data['sex']
             
             # Check if student is already registered for THIS specific course
             existing_registration = Student.query.filter_by(matricule=matricule, course_id=course_id).first()
