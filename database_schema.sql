@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS course;
 DROP TABLE IF EXISTS teacher;
 DROP TABLE IF EXISTS admin;
 DROP TABLE IF EXISTS password_reset;
+DROP TABLE IF EXISTS device_attendance;
 
 -- 1. Admin Table
 CREATE TABLE admin (
@@ -113,6 +114,15 @@ CREATE TABLE password_reset (
     FOREIGN KEY (teacher_id) REFERENCES teacher(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 8. Device Attendance Table
+CREATE TABLE device_attendance (
+    id VARCHAR(50) PRIMARY KEY,
+    session_id VARCHAR(50) REFERENCES attendance_session(id) NOT NULL,
+    device_identifier VARCHAR(100) NOT NULL,
+    student_id VARCHAR(50) REFERENCES student(id) NOT NULL,
+    marked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Create Indexes for better performance
 CREATE INDEX idx_teacher_email ON teacher(email);
 CREATE INDEX idx_teacher_username ON teacher(username);
@@ -135,6 +145,9 @@ CREATE INDEX idx_attendance_marked_at ON attendance(marked_at);
 
 CREATE INDEX idx_password_reset_code ON password_reset(reset_code);
 CREATE INDEX idx_password_reset_teacher ON password_reset(teacher_id);
+
+CREATE INDEX idx_device_attendance_session ON device_attendance(session_id);
+CREATE INDEX idx_device_attendance_device ON device_attendance(device_identifier);
 
 -- Insert default admin (optional - uncomment if needed)
 -- INSERT INTO admin (id, username, email, password_hash, is_admin) 
@@ -175,6 +188,7 @@ DESCRIBE course;
 DESCRIBE student;
 DESCRIBE attendance_session;
 DESCRIBE attendance;
+DESCRIBE device_attendance;
 
 -- Show indexes
 SHOW INDEX FROM teacher;
@@ -182,6 +196,7 @@ SHOW INDEX FROM course;
 SHOW INDEX FROM student;
 SHOW INDEX FROM attendance_session;
 SHOW INDEX FROM attendance;
+SHOW INDEX FROM device_attendance;
 
 -- Database schema summary
 SELECT 
@@ -189,4 +204,4 @@ SELECT
     COUNT(*) as Total_Tables
 FROM information_schema.tables 
 WHERE table_schema = DATABASE()
-AND table_name IN ('admin', 'teacher', 'course', 'student', 'attendance_session', 'attendance'); 
+AND table_name IN ('admin', 'teacher', 'course', 'student', 'attendance_session', 'attendance', 'device_attendance', 'password_reset'); 

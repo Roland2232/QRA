@@ -19,7 +19,7 @@ import re
 from datetime import datetime, timedelta
 from PIL import Image
 from geopy.distance import geodesic
-from models import db, Admin, Teacher, Course, Student, AttendanceSession, Attendance
+from models import db, Admin, Teacher, Course, Student, AttendanceSession, Attendance, DeviceAttendance
 import pandas as pd
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -702,19 +702,34 @@ def create_app():
             if errors:
                 return jsonify({'error': '; '.join(errors)}), 400
             
-            # Find student by matricule in this course
-            student = Student.query.filter_by(matricule=selected_matricule, course_id=course.id).first()
-            if not student:
-                return jsonify({'error': 'Invalid matricule selection'}), 400
-            
-            # Check if student already marked attendance
-            existing_attendance = Attendance.query.filter_by(
-                student_id=student.id,
-                session_id=session_id
-            ).first()
-            
-            if existing_attendance:
-                return jsonify({'error': 'Attendance already marked for this session'}), 400
+                    # Get device identifier (using IP address + User Agent for better uniqueness)
+        device_identifier = f"{request.remote_addr}_{hash(request.headers.get('User-Agent', ''))}"
+        
+        # Check if this device has already been used for attendance in this session
+        existing_device_usage = DeviceAttendance.query.filter_by(
+            session_id=session_id,
+            device_identifier=device_identifier
+        ).first()
+        
+        if existing_device_usage:
+            used_student = Student.query.get(existing_device_usage.student_id)
+            return jsonify({
+                'error': f'This device has already been used to mark attendance for {used_student.name} ({used_student.matricule}) in this session. Each device can only mark attendance for one student per session.'
+            }), 400
+        
+        # Find student by matricule in this course
+        student = Student.query.filter_by(matricule=selected_matricule, course_id=course.id).first()
+        if not student:
+            return jsonify({'error': 'Invalid matricule selection'}), 400
+        
+        # Check if student already marked attendance
+        existing_attendance = Attendance.query.filter_by(
+            student_id=student.id,
+            session_id=session_id
+        ).first()
+        
+        if existing_attendance:
+            return jsonify({'error': 'Attendance already marked for this session'}), 400
             
             # Verify location (within specified radius)
             if session.latitude and session.longitude:
@@ -728,28 +743,36 @@ def create_app():
                         'error': f'You are {distance:.0f}m away from the class location. Please move closer (within {session.radius_meters}m)'
                     }), 400
             
-            # Mark attendance
-            attendance = Attendance(
-                student_id=student.id,
-                session_id=session_id,
-                latitude=student_latitude,
-                longitude=student_longitude
-            )
+                    # Mark attendance
+        attendance = Attendance(
+            student_id=student.id,
+            session_id=session_id,
+            latitude=student_latitude,
+            longitude=student_longitude
+        )
+        
+        # Create device attendance record
+        device_attendance = DeviceAttendance(
+            session_id=session_id,
+            device_identifier=device_identifier,
+            student_id=student.id
+        )
+        
+        try:
+            db.session.add(attendance)
+            db.session.add(device_attendance)
+            db.session.commit()
             
-            try:
-                db.session.add(attendance)
-                db.session.commit()
-                
-                return jsonify({
-                    'success': f'Attendance marked successfully!',
-                    'student_name': student.name,
-                    'student_matricule': student.matricule,
-                    'student_sex': student.sex,
-                    'time_remaining': session.minutes_remaining()
-                })
-            except Exception as e:
-                db.session.rollback()
-                return jsonify({'error': f'Failed to mark attendance: {str(e)}'}), 500
+            return jsonify({
+                'success': f'Attendance marked successfully!',
+                'student_name': student.name,
+                'student_matricule': student.matricule,
+                'student_sex': student.sex,
+                'time_remaining': session.minutes_remaining()
+            })
+        except Exception as e:
+            db.session.rollback()
+            return jsonify({'error': f'Failed to mark attendance: {str(e)}'}), 500
         
         return render_template('take_attendance.html', session=session, course=course, students=students)
 
@@ -932,6 +955,7 @@ def create_app():
         # Attendance statistics
         attendance_data = []
         student_attendance = {}
+        chart_data = {'labels': [], 'attendance_counts': [], 'attendance_rates': []}
         
         for session in sessions:
             attendances = Attendance.query.filter_by(session_id=session.id).all()
@@ -944,6 +968,11 @@ def create_app():
                 'attendance_rate': round(attendance_rate, 1)
             })
             
+            # Chart data
+            chart_data['labels'].append(session.session_name)
+            chart_data['attendance_counts'].append(attendance_count)
+            chart_data['attendance_rates'].append(round(attendance_rate, 1))
+            
             # Track individual student attendance
             for attendance in attendances:
                 student = Student.query.get(attendance.student_id)
@@ -951,14 +980,36 @@ def create_app():
                     student_attendance[student.matricule] = {
                         'student': student,
                         'sessions_attended': 0,
-                        'attendance_rate': 0
+                        'attendance_rate': 0,
+                        'detailed_attendance': []
                     }
                 if student:
                     student_attendance[student.matricule]['sessions_attended'] += 1
+                    student_attendance[student.matricule]['detailed_attendance'].append({
+                        'session': session,
+                        'marked_at': attendance.marked_at,
+                        'status': 'Present'
+                    })
+        
+        # Add absent records for complete tracking
+        for matricule, data in student_attendance.items():
+            attended_sessions = [att['session'].id for att in data['detailed_attendance']]
+            for session in sessions:
+                if session.id not in attended_sessions:
+                    data['detailed_attendance'].append({
+                        'session': session,
+                        'marked_at': None,
+                        'status': 'Absent'
+                    })
+            # Sort by session date
+            data['detailed_attendance'].sort(key=lambda x: x['session'].created_at)
         
         # Calculate individual attendance rates
         for matricule, data in student_attendance.items():
             data['attendance_rate'] = round((data['sessions_attended'] / total_sessions * 100) if total_sessions > 0 else 0, 1)
+        
+        # Average attendance rate
+        avg_attendance_rate = round(sum(d['attendance_rate'] for d in attendance_data) / len(attendance_data), 1) if attendance_data else 0
         
         return render_template('course_analytics.html',
                              course=course,
@@ -969,7 +1020,9 @@ def create_app():
                              total_students=total_students,
                              total_sessions=total_sessions,
                              male_students=male_students,
-                             female_students=female_students)
+                             female_students=female_students,
+                             chart_data=chart_data,
+                             avg_attendance_rate=avg_attendance_rate)
 
     @app.route('/teacher/students')
     @login_required

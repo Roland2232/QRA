@@ -1,9 +1,10 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
-from datetime import datetime
+from datetime import datetime, timedelta
 import secrets
 import uuid
 import random
+import string
 
 db = SQLAlchemy()
 
@@ -80,8 +81,10 @@ class Student(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     attendance_records = db.relationship('Attendance', backref='student', lazy=True, cascade='all, delete-orphan')
+    device_attendances = db.relationship('DeviceAttendance', backref='student', lazy=True, cascade='all, delete-orphan')
     
-    __table_args__ = (db.UniqueConstraint('matricule', 'course_id', name='unique_student_course'),)
+    __table_args__ = (db.UniqueConstraint('matricule', 'course_id', name='unique_student_course'),
+                      db.CheckConstraint("sex IN ('Male', 'Female')", name='check_valid_sex'))
 
 class AttendanceSession(db.Model):
     __tablename__ = 'attendance_session'
@@ -100,6 +103,7 @@ class AttendanceSession(db.Model):
     qr_code_path = db.Column(db.String(255))
     
     attendance_records = db.relationship('Attendance', backref='session', lazy=True, cascade='all, delete-orphan')
+    device_attendances = db.relationship('DeviceAttendance', backref='session', lazy=True, cascade='all, delete-orphan')
     
     def is_expired(self):
         if self.expires_at:
@@ -124,4 +128,17 @@ class Attendance(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     __table_args__ = (db.UniqueConstraint('student_id', 'session_id', name='unique_student_session'),) 
+
+class DeviceAttendance(db.Model):
+    __tablename__ = 'device_attendance'
+    
+    id = db.Column(db.String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = db.Column(db.String, db.ForeignKey('attendance_session.id'), nullable=False)
+    device_identifier = db.Column(db.String(100), nullable=False)
+    student_id = db.Column(db.String, db.ForeignKey('student.id'), nullable=False)
+    marked_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    __table_args__ = (
+        db.UniqueConstraint('session_id', 'device_identifier', name='unique_device_per_session'),
+    )
 
